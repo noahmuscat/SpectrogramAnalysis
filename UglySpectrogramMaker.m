@@ -1,43 +1,69 @@
 %% Makes ugly, histogram based spectrograms
 % file comes from TheStateEditor
 
-% Load the data
-rootPath = '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/SleepStuff/SleepScoringFilesScatha/Canute_231210_041514/Canute_231210.eegstates.mat';
-data = load(rootPath);
+% Define the base folder for the 300 Lux lighting condition
+baseFolder = '/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux';
+[~, condition] = fileparts(baseFolder);
+[~, animalName] = fileparts(fileparts(baseFolder)); % Get animal name (Canute)
 
-% Extract start time from the file path
-[~, folderName, ~] = fileparts(fileparts(rootPath));
-startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
+% Get a list of all subfolders in the base folder
+subFolders = dir(baseFolder);
+subFolders = subFolders([subFolders.isdir]);  % Keep only directories
+subFolders = subFolders(~ismember({subFolders.name}, {'.', '..'}));  % Remove '.' and '..'
 
-% Convert StateInfo to struct array specs
-specs = SaveSpectrogramsAsStruct(data.StateInfo);
+% Optional outlier removal setting
+stdDevThreshold = 2; % Set the number of standard deviations to use for outlier removal; set to empty ([]) to disable
 
-% Get channel numbers
-channels = zeros(1, length(data.StateInfo.fspec));
-for i = 1:length(channels)
-    channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
+% Initialize variables for pooled data
+pooledSpecs = struct('spec', {}, 'freqs', {}, 'times', {}, 'info', {});
+firstRun = true;
+
+% Iterate through all subfolders and process the data
+for k = 1:length(subFolders)
+    currentSubFolder = fullfile(baseFolder, subFolders(k).name);
+    matFile = dir(fullfile(currentSubFolder, '*.eegstates.mat'));
+    
+    if ~isempty(matFile)
+        rootPath = fullfile(currentSubFolder, matFile.name);
+        data = load(rootPath);
+
+        % Extract start time from the file path
+        [~, folderName, ~] = fileparts(fileparts(rootPath));
+        startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
+
+        % Convert StateInfo to struct array specs
+        specs = SaveSpectrogramsAsStruct(data.StateInfo);
+
+        % Pool the specs data
+        pooledSpecs = aggregateSpecs(pooledSpecs, specs, startDatetime, firstRun);
+        firstRun = false;
+    end
 end
 
-% Process the spectrogram data
-PowerFreqFromSpecFreqInator(specs, startDatetime, channels);
+% Get channel numbers
+if ~isempty(pooledSpecs)
+    channels = zeros(1, length(pooledSpecs));
+    for i = 1:length(channels)
+        channels(1, i) = pooledSpecs(i).info.Ch;
+    end
+
+    % Process the pooled spectrogram data
+    PowerFreqFromSpecFreqInator(pooledSpecs, channels, stdDevThreshold);
+end
 
 %% functions
 function specs = SaveSpectrogramsAsStruct(StateInfo)
-    specs = struct('spec', {}, 'freqs', {}, 'times', {});
+    specs = struct('spec', {}, 'freqs', {}, 'times', {}, 'info', {});
 
     for a = 1:length(StateInfo.fspec)
         specs(a).spec = StateInfo.fspec{a}.spec;
         specs(a).freqs = StateInfo.fspec{a}.fo;
         specs(a).times = StateInfo.fspec{a}.to;    
+        specs(a).info = StateInfo.fspec{a}.info;
     end
 end
 
-function [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, channels)
-    % Default value for startDatetime
-    if ~exist('startDatetime', 'var') || isempty(startDatetime)
-        error('startDatetime is required as an input.');
-    end
-    
+function pooledSpecs = aggregateSpecs(pooledSpecs, specs, startDatetime, firstRun)
     % Determine DST and lightsOnHour
     isDST = isdst(startDatetime);
     if isDST
@@ -46,52 +72,100 @@ function [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, cha
         lightsOnHour = 5;
     end
 
-    % Validate input structure
-    if ~isstruct(specs) || isempty(specs)
-        error('Input specs must be a non-empty struct array.');
-    end
+    % Adjust times based on the initial start time and lights on hour
+    initialDatetime = startDatetime - hours(lightsOnHour);
+    for a = 1:length(specs)
+        adjustedDatetimes = initialDatetime + seconds(specs(a).times);
+        
+        % Determine ZT hours for each data point
+        adjustedHours = hour(adjustedDatetimes); % Extract the hour part of the adjusted times
 
-    requiredFields = {'spec', 'freqs', 'times'};
-    for i = 1:length(specs)
-        if ~all(isfield(specs(i), requiredFields))
-            error('Each element of specs must contain fields: spec, freqs, and times.');
+        if firstRun
+            pooledSpecs(a).spec = zeros(24, length(specs(a).freqs));
+            pooledSpecs(a).times = (0:23)'; % Zeitgeber time hours
+            pooledSpecs(a).freqs = specs(a).freqs;
+            pooledSpecs(a).info = specs(a).info;
+            pooledSpecs(a).count = zeros(24, 1); % Count of data points in each bin
+        end
+
+        % Average power for each frequency in each ZT hour bin
+        for zt = 0:23
+            indices = (adjustedHours == zt);
+            if any(indices)
+                pooledSpecs(a).spec(zt + 1, :) = pooledSpecs(a).spec(zt + 1, :) + sum(specs(a).spec(indices, :), 1);
+                pooledSpecs(a).count(zt + 1) = pooledSpecs(a).count(zt + 1) + sum(indices);
+            end
+        end
+    end
+end
+
+function [bands, epochs] = PowerFreqFromSpecFreqInator(pooledSpecs, channels, stdDevThreshold)
+    % Validate input structure
+    if ~isstruct(pooledSpecs) || isempty(pooledSpecs)
+        error('Input pooledSpecs must be a non-empty struct array.');
+    end
+    
+    % Ensure channel numbers are available
+    if isempty(channels)
+        if isfield(pooledSpecs, 'info') && isfield(pooledSpecs(1).info, 'Ch')
+            channels = arrayfun(@(x) x.info.Ch, pooledSpecs);
+        else
+            error('Channels information is required.');
         end
     end
 
-    % Defining frequency bands
-    bands = initializeBands();
-
-    % Setting up time intervals
-    initialDatetime = startDatetime + hours(lightsOnHour);
-    timestamps = specs(1).times;
-    adjustedDatetimes = initialDatetime + seconds(timestamps);
-    adjustedHours = hour(adjustedDatetimes);
-
-    % Prepare variables for binning
     numOfHours = 24;
+
+    % Calculate average spectrogram for pooled data
+    for i = 1:length(pooledSpecs)
+        for zt = 0:23
+            if pooledSpecs(i).count(zt + 1) > 0
+                pooledSpecs(i).spec(zt + 1, :) = pooledSpecs(i).spec(zt + 1, :) / pooledSpecs(i).count(zt + 1);
+            end
+        end
+    end
+
+    % Remove outliers based on specified standard deviation threshold
+    if ~isempty(stdDevThreshold)
+        for i = 1:length(pooledSpecs)
+            meanSpec = mean(pooledSpecs(i).spec, 1);
+            stdSpec = std(pooledSpecs(i).spec, 0, 1);
+
+            for zt = 0:23
+                if pooledSpecs(i).count(zt + 1) > 0
+                    outliers = abs(pooledSpecs(i).spec(zt + 1, :) - meanSpec) > (stdDevThreshold * stdSpec);
+                    pooledSpecs(i).spec(zt + 1, outliers) = meanSpec(outliers);  % Replace outliers with mean
+                end
+            end
+        end
+    end
+
+    % Proceed with existing function logic
+    bands = initializeBands();
     epochs.HourlyBinIndices = cell(1, numOfHours);
-    for zt = 0:(numOfHours - 1)
-        epochs.HourlyBinIndices{zt + 1} = find(adjustedHours == zt);
+    for zt = 0:numOfHours-1
+        epochs.HourlyBinIndices{zt+1} = find(pooledSpecs(1).times == zt);
     end
 
     % Initialize power vectors for each band
     for b = 1:length(bands)
-        bands(b).powervectors.All = cell(length(specs), 1);
-        bands(b).powervectors.HourlyBin = cell(length(specs), numOfHours);
+        bands(b).powervectors.All = cell(length(pooledSpecs), 1);
+        bands(b).powervectors.HourlyBin = cell(length(pooledSpecs), numOfHours);
     end
 
     % Extracting powers for each frequency band
     for b = 1:length(bands)
         tbandname = bands(b).name;
         tband = bands(b);
-        tband.freqidxs = find(specs(1).freqs >= tband.startstopfreq(1) & specs(1).freqs < tband.startstopfreq(2));
+        tband.freqidxs = find(pooledSpecs(1).freqs >= tband.startstopfreq(1) & pooledSpecs(1).freqs < tband.startstopfreq(2));
 
         if isempty(tband.freqidxs) && ~strcmp(tbandname, 'thetaratio')
             warning(['No frequencies found in the range for band: ', tbandname]);
             continue;
         end
         
-        for a = 1:length(specs)
+        % Loop over pooled specs
+        for a = 1:length(pooledSpecs)
             if strcmp(tbandname, 'thetaratio')
                 [delta_power, spindle_power, theta_power] = getBandPowers(bands, a);
                 if isempty(delta_power) || isempty(spindle_power) || isempty(theta_power)
@@ -100,11 +174,11 @@ function [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, cha
                     tband.powervectors.All{a} = theta_power ./ (delta_power + spindle_power);
                 end
             else
-                specData = specs(a).spec(:, tband.freqidxs);
+                specData = pooledSpecs(a).spec(:, tband.freqidxs);
                 tband.powervectors.All{a} = mean(specData, 2);
             end
 
-            for zt = 0:(numOfHours - 1)
+            for zt = 0:numOfHours - 1
                 indices = epochs.HourlyBinIndices{zt + 1};
                 if ~isempty(indices)
                     tband.powervectors.HourlyBin{a, zt + 1} = mean(tband.powervectors.All{a}(indices));
@@ -112,16 +186,16 @@ function [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, cha
             end
         end
         
-        % Avoiding subscripted assignment issue by ensuring bands struct consistency
+        % Ensuring struct consistency
         fields = fieldnames(tband);
         for field = fields'
             bands(b).(field{1}) = tband.(field{1});
         end
     end
 
-    % Plotting with hourly bins
-    plotPowerVectors(specs, bands, epochs.HourlyBinIndices, channels);
-    plotPercentOscillatoryPower(specs, bands, epochs.HourlyBinIndices, channels);
+    % Plotting with hourly bins for each channel
+    plotPowerVectors(pooledSpecs, bands, epochs.HourlyBinIndices, channels);
+    plotPercentOscillatoryPower(pooledSpecs, bands, epochs.HourlyBinIndices, channels);
 end
 
 function bands = initializeBands()
@@ -145,12 +219,13 @@ function [delta_power, spindle_power, theta_power] = getBandPowers(bands, channe
     theta_power = bands(2).powervectors.All{channel};
 end
 
-function plotPowerVectors(specs, bands, hourlyBinIndices, channels)
+function plotPowerVectors(pooledSpecs, bands, hourlyBinIndices, channels)
     bandnames = {bands.name};
     numOfHours = 24;
     zt_labels = cellstr(num2str((0:numOfHours-1)')); % Create ZT hour labels
     
-    for a = 1:length(specs)
+    % Create a figure for each pooled spec
+    for a = 1:length(pooledSpecs)
         figure;
         sgtitle(['Power Across Bands - Channel ', num2str(channels(a))]); % Using sgtitle for a single title for the figure
         plotcounter = 0;
@@ -177,13 +252,13 @@ function plotPowerVectors(specs, bands, hourlyBinIndices, channels)
     end
 end
 
-function plotPercentOscillatoryPower(specs, bands, hourlyBinIndices, channels)
+function plotPercentOscillatoryPower(pooledSpecs, bands, hourlyBinIndices, channels)
     bandnames = {bands.name};
     numOfHours = 24;
     zt_labels = cellstr(num2str((0:numOfHours-1)')); % Create ZT hour labels
     
-    for a = 1:length(specs)
-        % Initialize figure
+    % Initialize figure for each pooled spec
+    for a = 1:length(pooledSpecs)
         figure;
         sgtitle(['% Oscillatory Power - Channel ', num2str(channels(a))]); % Using sgtitle for a single title for the figure
         plotcounter = 0;

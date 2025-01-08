@@ -1,53 +1,63 @@
 %% Makes ugly, histogram-based spectrograms for All Conditions
-
-baseDirs = {
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/SleepStuff/SleepScoringFilesScatha/Canute/300Lux', ...
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/SleepStuff/SleepScoringFilesScatha/Canute/1000LuxWk1', ...
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/SleepStuff/SleepScoringFilesScatha/Canute/1000LuxWk4'};
+baseDirs = {'/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux', ...
+            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk1', ...
+            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk4'};
 
 % Initialize a structure to hold the results for each condition
 results = struct();
 
 for b = 1:length(baseDirs)
-    baseDir = baseDirs{b};
-    [~, condition] = fileparts(baseDir); % Extract condition name (e.g., '300Lux')
+    baseFolder = baseDirs{b};
+    [~, condition] = fileparts(baseFolder); % Extract condition name (e.g., '300Lux')
+    [~, animalName] = fileparts(fileparts(baseFolder)); % Extract animal name (e.g., 'Canute')
 
-    % Get a list of all .eegstates.mat files in the baseDir
-    matFiles = dir(fullfile(baseDir, '*.eegstates.mat'));
+    % Modify condition name to be valid field name
+    validCondition = ['Cond', condition];
 
     % Initialize variables for pooled data for this condition
     pooledBands = [];
     pooledEpochs = [];
+    channels = [];
 
-    for k = 1:length(matFiles)
-        rootPath = fullfile(matFiles(k).folder, matFiles(k).name);
-        data = load(rootPath);
+    % Get a list of all subfolders in the base folder
+    subFolders = dir(baseFolder);
+    subFolders = subFolders([subFolders.isdir]);  % Keep only directories
+    subFolders = subFolders(~ismember({subFolders.name}, {'.', '..'}));  % Remove '.' and '..'
 
-        % Extract start time from the file path
-        [~, folderName, ~] = fileparts(fileparts(rootPath));
-        startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
+    for k = 1:length(subFolders)
+        currentSubFolder = fullfile(baseFolder, subFolders(k).name);
+        matFiles = dir(fullfile(currentSubFolder, '*.eegstates.mat'));
 
-        % Convert StateInfo to struct array specs
-        specs = SaveSpectrogramsAsStruct(data.StateInfo);
+        for m = 1:length(matFiles)
+            rootPath = fullfile(matFiles(m).folder, matFiles(m).name);
+            data = load(rootPath);
 
-        % Get channel numbers
-        channels = zeros(1, length(data.StateInfo.fspec));
-        for i = 1:length(channels)
-            channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
+            % Extract start time from the file path
+            [~, folderName, ~] = fileparts(fileparts(rootPath));
+            startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
+
+            % Convert StateInfo to struct array specs
+            specs = SaveSpectrogramsAsStruct(data.StateInfo);
+
+            % Get channel numbers
+            channels = zeros(1, length(data.StateInfo.fspec));
+            for i = 1:length(channels)
+                channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
+            end
+
+            % Process the spectrogram data
+            [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, channels);
+
+            % Aggregate data
+            pooledBands = aggregateBands(pooledBands, bands);
+            pooledEpochs = aggregateEpochs(pooledEpochs, epochs);
         end
-
-        % Process the spectrogram data
-        [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, channels);
-
-        % Aggregate data
-        pooledBands = aggregateBands(pooledBands, bands);
-        pooledEpochs = aggregateEpochs(pooledEpochs, epochs);
     end
 
     % Store results for the condition
-    results.(condition).Bands = pooledBands;
-    results.(condition).Epochs = pooledEpochs;
-    results.(condition).Channels = channels;
+    results.(validCondition).Bands = pooledBands;
+    results.(validCondition).Epochs = pooledEpochs;
+    results.(validCondition).Channels = channels;
 
     %% Plotting for individuals
     plotPowerVectors(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
@@ -55,65 +65,72 @@ for b = 1:length(baseDirs)
 end
 
 %% Comparisons Across Conditions
-
 conditions = fieldnames(results);
 numOfHours = 24;
 bandnames = {results.(conditions{1}).Bands.name};
 
 % Plot comparisons for power vectors
-figure;
-sgtitle('Power Across Conditions'); 
-for b = 1:length(bandnames)
-    subplot(4, 3, b);
-    hold on;
-    for c = 1:length(conditions)
-        condition = conditions{c};
-        bands = results.(condition).Bands;
-        channels = results.(condition).Channels;
-        
-        % Assuming first channel for comparison
-        powerData = bands(b).powervectors.HourlyBin{1, :};
-        plotData = cellfun(@mean, powerData);
-        plot(0:numOfHours-1, plotData, 'DisplayName', [condition ' - Channel ' num2str(channels(1))]);
+for i = 1:length(results.(conditions{1}).Channels)
+    figure;
+    sgtitle(['Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]); 
+    for b = 1:length(bandnames)
+        subplot(4, 3, b);
+        hold on;
+        for c = 1:length(conditions)
+            condition = conditions{c};
+            channels = results.(condition).Channels;
+            bands = results.(condition).Bands;
+
+            % Assuming this channel for comparison
+            if i <= length(channels)
+                powerData = bands(b).powervectors.HourlyBin(i, :);
+                plotData = cellfun(@mean, powerData);
+                plot(0:numOfHours-1, plotData, 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);
+            end
+        end
+        hold off;
+        xlabel('Zeitgeber Time (ZT)');
+        ylabel('Power');
+        title(bandnames{b});
+        legend show;
     end
-    hold off;
-    xlabel('Zeitgeber Time (ZT)');
-    ylabel('Power');
-    title(bandnames{b});
-    legend show;
 end
 
 % Plot comparisons for percent oscillatory power
-figure;
-sgtitle('Percent Oscillatory Power Across Conditions'); 
-for b = 1:length(bandnames)
-    subplot(4, 3, b);
-    hold on;
-    for c = 1:length(conditions)
-        condition = conditions{c};
-        bands = results.(condition).Bands;
-        channels = results.(condition).Channels;
+for i = 1:length(results.(conditions{1}).Channels)
+    figure;
+    sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]);
+    for b = 1:length(bandnames)
+        subplot(4, 3, b);
+        hold on;
+        for c = 1:length(conditions)
+            condition = conditions{c};
+            channels = results.(condition).Channels;
+            bands = results.(condition).Bands;
 
-        totalPower = zeros(numOfHours, 1);
-        percentagePower = zeros(numOfHours, 1);
-        for zt = 0:(numOfHours-1)
-            if ~isempty(bands(b).powervectors.HourlyBin{1, zt+1})
-                totalPower(zt+1) = totalPower(zt+1) + mean(cellfun(@mean, bands(b).powervectors.HourlyBin(:, zt+1)));
+            totalPower = zeros(numOfHours, 1);
+            percentagePower = zeros(numOfHours, 1);
+            for zt = 0:(numOfHours-1)
+                if ~isempty(bands(b).powervectors.HourlyBin{i, zt+1})
+                    totalPower(zt+1) = totalPower(zt+1) + mean(cellfun(@mean, bands(b).powervectors.HourlyBin(:, zt+1)));
+                end
             end
-        end
 
-        for zt = 0:(numOfHours-1)
-            if totalPower(zt+1) > 0
-                percentagePower(zt+1) = 100 * mean(cellfun(@mean, bands(b).powervectors.HourlyBin(1, zt+1))) / totalPower(zt+1);
+            for zt = 0:(numOfHours-1)
+                if totalPower(zt+1) > 0
+                    if ~isempty(bands(b).powervectors.HourlyBin{i, zt+1})
+                        percentagePower(zt+1) = 100 * mean(cellfun(@mean, bands(b).powervectors.HourlyBin(i, zt+1))) / totalPower(zt+1);
+                    end
+                end
             end
+            plot(0:numOfHours-1, percentagePower, 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);
         end
-        plot(0:numOfHours-1, percentagePower, 'DisplayName', [condition ' - Channel ' num2str(channels(1))]);
+        hold off;
+        xlabel('Zeitgeber Time (ZT)');
+        ylabel('Percent Power (%)');
+        title(bandnames{b});
+        legend show;
     end
-    hold off;
-    xlabel('Zeitgeber Time (ZT)');
-    ylabel('Percent Power (%)');
-    title(bandnames{b});
-    legend show;
 end
 
 %% functions
@@ -200,13 +217,10 @@ function [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime, cha
         end
         
         fields = fieldnames(tband);
-        for field = fields'
-            bands(b).(field{1}) = tband.(field{1});
+        for f = 1:length(fields)
+            bands(b).(fields{f}) = tband.(fields{f});
         end
     end
-
-    plotPowerVectors(specs, bands, epochs.HourlyBinIndices, channels);
-    plotPercentOscillatoryPower(specs, bands, epochs.HourlyBinIndices, channels);
 end
 
 function bands = initializeBands()
@@ -349,8 +363,8 @@ function aggregatedEpochs = aggregateEpochs(pooledEpochs, newEpochs)
     end
 
     fields = fieldnames(newEpochs);
-    for field = fields'
-        pooledEpochs.(field{1}) = [pooledEpochs.(field{1}) newEpochs.(field{1})];
+    for i = 1:length(fields)
+        pooledEpochs.(fields{i}) = [pooledEpochs.(fields{i}), newEpochs.(fields{i})];
     end
     aggregatedEpochs = pooledEpochs;
 end

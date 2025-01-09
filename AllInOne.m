@@ -6,7 +6,7 @@ baseDirs = {'/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux', ...
             '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk4'};
 
 % Initialize a structure to hold the results for each condition
-results = struct();
+resultsSpectrogram = struct();
 
 for b = 1:length(baseDirs)
     baseFolder = baseDirs{b};
@@ -118,11 +118,11 @@ for b = 1:length(baseDirs)
     end
 
     % Store results for the condition
-    results.(validCondition).Bands = pooledBands;
-    results.(validCondition).Epochs = pooledEpochs;
-    results.(validCondition).BinnedSpec = pooledBinnedSpec;
-    results.(validCondition).Freqs = freqs;
-    results.(validCondition).Channels = channels;
+    resultsSpectrogram.(validCondition).Bands = pooledBands;
+    resultsSpectrogram.(validCondition).Epochs = pooledEpochs;
+    resultsSpectrogram.(validCondition).BinnedSpec = pooledBinnedSpec;
+    resultsSpectrogram.(validCondition).Freqs = freqs;
+    resultsSpectrogram.(validCondition).Channels = channels;
 
     %% Plotting histogram-based results for the condition
     plotPowerVectors(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
@@ -151,26 +151,26 @@ end
 matFileName = 'spectrogramMetrics.mat';
 matFolderPath = '/data/Jeremy/Sleepscoring_Data_Noah/Canute';
 matFilePath = fullfile(matFolderPath, matFileName);
-save(matFilePath, "results");
+save(matFilePath, "resultsSpectrogram");
 
 %% Comparisons Across Conditions
-conditions = fieldnames(results);
-bandnames = {results.(conditions{1}).Bands.name};
+conditions = fieldnames(resultsSpectrogram);
+bandnames = {resultsSpectrogram.(conditions{1}).Bands.name};
 numOfHours = 24;
 zt_labels = cellstr(num2str((0:numOfHours-1)'));
 
 % Plot comparisons for power vectors and percent oscillatory power
-for i = 1:length(results.(conditions{1}).Channels)
+for i = 1:length(resultsSpectrogram.(conditions{1}).Channels)
     % Histogram-based power vectors comparison
     figure;
-    sgtitle(['Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]); 
+    sgtitle(['Power Across Conditions - Channel ', num2str(resultsSpectrogram.(conditions{1}).Channels(i))]); 
     for b = 1:length(bandnames)
         subplot(4, 3, b);
         hold on;
         for c = 1:length(conditions)
             condition = conditions{c};
-            channels = results.(condition).Channels;
-            bands = results.(condition).Bands;
+            channels = resultsSpectrogram.(condition).Channels;
+            bands = resultsSpectrogram.(condition).Bands;
 
             % Assuming this channel for comparison
             if i <= length(channels)
@@ -188,14 +188,14 @@ for i = 1:length(results.(conditions{1}).Channels)
 
     % Histogram-based percent oscillatory power comparison
     figure;
-    sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]);
+    sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(resultsSpectrogram.(conditions{1}).Channels(i))]);
     for b = 1:length(bandnames)
         subplot(4, 3, b);
         hold on;
         for c = 1:length(conditions)
             condition = conditions{c};
-            channels = results.(condition).Channels;
-            bands = results.(condition).Bands;
+            channels = resultsSpectrogram.(condition).Channels;
+            bands = resultsSpectrogram.(condition).Bands;
 
             totalPower = zeros(numOfHours, 1);
             percentagePower = zeros(numOfHours, 1);
@@ -226,8 +226,8 @@ for i = 1:length(results.(conditions{1}).Channels)
     hold on;
     for c = 1:length(conditions)
         condition = conditions{c};
-        channels = results.(condition).Channels;
-        plotData = squeeze(results.(condition).BinnedSpec{i});
+        channels = resultsSpectrogram.(condition).Channels;
+        plotData = squeeze(resultsSpectrogram.(condition).BinnedSpec{i});
         plot(0:numOfHours-1, mean(plotData, 2), 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);  % Mean across frequencies for each ZT hour
     end
     hold off;

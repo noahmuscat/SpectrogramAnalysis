@@ -124,11 +124,6 @@ for b = 1:length(baseDirs)
     results.(validCondition).Freqs = freqs;
     results.(validCondition).Channels = channels;
 
-    matFileName = 'spectrogramMetrics.mat';
-    matFilePath = fullfile(baseFolder, matFileName);
-
-    save(matFilePath, "results");
-
     %% Plotting histogram-based results for the condition
     plotPowerVectors(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
     plotPercentOscillatoryPower(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
@@ -151,6 +146,12 @@ for b = 1:length(baseDirs)
         grid on;
     end
 end
+
+%% saving .mat
+matFileName = 'spectrogramMetrics.mat';
+matFolderPath = '/data/Jeremy/Sleepscoring_Data_Noah/Canute';
+matFilePath = fullfile(matFolderPath, matFileName);
+save(matFilePath, "results");
 
 %% Comparisons Across Conditions
 conditions = fieldnames(results);

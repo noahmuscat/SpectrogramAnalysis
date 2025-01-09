@@ -1,4 +1,6 @@
-%% Makes ugly, histogram-based spectrograms for All Conditions
+%% Combined Script for Histograms and Heat Maps of Spectrograms
+
+% Define directories for different experimental conditions
 baseDirs = {'/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux', ...
             '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk1', ...
             '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk4'};
@@ -17,6 +19,7 @@ for b = 1:length(baseDirs)
     % Initialize variables for pooled data for this condition
     pooledBands = [];
     pooledEpochs = [];
+    pooledBinnedSpec = {}; 
     channels = [];
 
     % Get a list of all subfolders in the base folder
@@ -30,14 +33,19 @@ for b = 1:length(baseDirs)
 
         for m = 1:length(matFiles)
             rootPath = fullfile(matFiles(m).folder, matFiles(m).name);
-            data = load(rootPath);
+            data = load(rootPath);  % Load the .mat file
 
-            % Extract start time from the file path
+            % Extract start time
             [~, folderName, ~] = fileparts(fileparts(rootPath));
             startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
 
-            % Convert StateInfo to struct array specs
-            specs = SaveSpectrogramsAsStruct(data.StateInfo);
+            % Determine the DST offset
+            isDST = isdst(startDatetime);
+            if isDST
+                lightsOnHour = 6;
+            else
+                lightsOnHour = 5;
+            end
 
             % Get channel numbers
             channels = zeros(1, length(data.StateInfo.fspec));
@@ -45,32 +53,114 @@ for b = 1:length(baseDirs)
                 channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
             end
 
+            % Initialize storage for this file's binned data
+            binnedSpecs = cell(1, length(channels)); % Channels
+            nBins = cell(1, length(channels)); % Channels
+            
+            % Convert StateInfo to struct array specs
+            specs = SaveSpectrogramsAsStruct(data.StateInfo);
+            
             % Process the spectrogram data
             [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime);
-
-            % Aggregate data
+            
+            % Aggregate data for histogram-based analysis
             pooledBands = aggregateBands(pooledBands, bands);
             pooledEpochs = aggregateEpochs(pooledEpochs, epochs);
+            
+            % Process heat map-based data for each channel
+            for i = 1:length(channels)
+                % Extract relevant fields from the spectrogram data
+                spec = data.StateInfo.fspec{1, i}.spec;  % Spectrogram data (power or magnitude)
+                times = data.StateInfo.fspec{1, i}.to;   % Time points in seconds
+                freqs = data.StateInfo.fspec{1, i}.fo;   % Frequencies in Hz
+
+                % Adjust times based on the initial start time and lights on hour
+                initialDatetime = startDatetime - hours(lightsOnHour);
+                adjustedDatetimes = initialDatetime + seconds(times);
+
+                % Determine ZT hours for each data point
+                adjustedHours = hour(adjustedDatetimes);  % Extract the hour part of the adjusted times
+
+                % Initialize variables for binning
+                numOfHours = 24;  % ZT 0 to 23
+                binnedSpec = zeros(numOfHours, length(freqs));  % Rows for each ZT hour, columns for frequencies
+                nBin = zeros(1, numOfHours);  % Count of data points in each bin
+
+                % Average power for each frequency in each ZT hour bin
+                for zt = 0:23
+                    indices = (adjustedHours == zt);
+                    if any(indices)
+                        binnedSpec(zt + 1, :) = mean(spec(indices, :), 1);
+                        nBin(zt + 1) = sum(indices);
+                    end
+                end
+
+                % If pooledBinnedSpec for a channel is empty, initialize it with the current binnedSpec
+                if isempty(pooledBinnedSpec)
+                    pooledBinnedSpec{i} = binnedSpec;
+                else
+                    if length(pooledBinnedSpec) < i || isempty(pooledBinnedSpec{i})
+                        pooledBinnedSpec{i} = binnedSpec;
+                    else
+                        % Aggregate current file's data into the pooled data for the channel
+                        pooledBinnedSpec{i} = pooledBinnedSpec{i} + binnedSpec;
+                    end
+                end
+
+                % If nBins for a channel is empty, initialize it with the current nBin
+                if length(nBins) < i || isempty(nBins{i})
+                    nBins{i} = nBin;
+                else
+                    nBins{i} = nBins{i} + nBin;
+                end
+            end
         end
     end
 
     % Store results for the condition
     results.(validCondition).Bands = pooledBands;
     results.(validCondition).Epochs = pooledEpochs;
+    results.(validCondition).BinnedSpec = pooledBinnedSpec;
+    results.(validCondition).Freqs = freqs;
     results.(validCondition).Channels = channels;
 
-    %% Plotting for individuals
+    matFileName = 'spectrogramMetrics.mat';
+    matFilePath = fullfile(baseFolder, matFileName);
+
+    save(matFilePath, "results");
+
+    %% Plotting histogram-based results for the condition
     plotPowerVectors(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
     plotPercentOscillatoryPower(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
+
+    %% Plotting heat map-based spectrogram for the condition
+    numOfHours = 24;
+    zt_labels = cellstr(num2str((0:numOfHours-1)'));  % Create ZT labels
+    for i = 1:length(channels)
+        figure;
+        imagesc(0:23, freqs, squeeze(pooledBinnedSpec{i})');  % Convert ZT hours to x-axis
+        axis xy;
+        xlabel('Zeitgeber Time (ZT)');
+        xticks(0:23);  % ZT 0 to 23
+        xticklabels(zt_labels);
+        ylabel('Frequency (Hz)');
+        title(['Spectrogram - Channel ', num2str(channels(i)), ' - ', condition]);
+        colorbar;
+        colormap('jet'); 
+        set(gca, 'FontSize', 14);
+        grid on;
+    end
 end
 
 %% Comparisons Across Conditions
 conditions = fieldnames(results);
-numOfHours = 24;
 bandnames = {results.(conditions{1}).Bands.name};
+numOfHours = 24;
+zt_labels = cellstr(num2str((0:numOfHours-1)'));
 
-% Plot comparisons for power vectors
+% Plot comparisons for power vectors and percent oscillatory power
 for i = 1:length(results.(conditions{1}).Channels)
+    % Histogram-based power vectors comparison
     figure;
     sgtitle(['Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]); 
     for b = 1:length(bandnames)
@@ -94,10 +184,8 @@ for i = 1:length(results.(conditions{1}).Channels)
         title(bandnames{b});
         legend show;
     end
-end
 
-% Plot comparisons for percent oscillatory power
-for i = 1:length(results.(conditions{1}).Channels)
+    % Histogram-based percent oscillatory power comparison
     figure;
     sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(results.(conditions{1}).Channels(i))]);
     for b = 1:length(bandnames)
@@ -131,9 +219,29 @@ for i = 1:length(results.(conditions{1}).Channels)
         title(bandnames{b});
         legend show;
     end
+
+    % Heat map-based spectrogram comparison
+    figure;
+    hold on;
+    for c = 1:length(conditions)
+        condition = conditions{c};
+        channels = results.(condition).Channels;
+        plotData = squeeze(results.(condition).BinnedSpec{i});
+        plot(0:numOfHours-1, mean(plotData, 2), 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);  % Mean across frequencies for each ZT hour
+    end
+    hold off;
+    ylabel('Average Power');
+    xlabel('Zeitgeber Time (ZT)');
+    title(['Comparison of BinnedSpec Across Conditions - Channel ', num2str(channels(i))]);
+    xticks(0:23);
+    xticklabels(zt_labels);
+    legend show;
+    set(gca, 'FontSize', 14);
+    grid on;
 end
 
-%% functions
+%% Sub-functions
+
 function specs = SaveSpectrogramsAsStruct(StateInfo)
     specs = struct('spec', {}, 'freqs', {}, 'times', {});
 
@@ -299,14 +407,12 @@ function plotPercentOscillatoryPower(specs, bands, hourlyBinIndices, channels, c
             tband = bands(b);
             plotcounter = plotcounter + 1;
             subplot(4, 3, plotcounter);
-
             percentPower = zeros(1, numOfHours);
             for zt = 0:(numOfHours-1)
                 if ~isempty(hourlyBinIndices{zt+1}) && totalPower(zt+1) > 0
                     percentPower(zt+1) = 100 * mean(tband.powervectors.HourlyBin{a, zt+1}) / totalPower(zt+1);
                 end
             end
-
             plot(0:numOfHours-1, percentPower);
             addShadedAreaToPlotZT24Hour();
             xlabel('Zeitgeber Time (ZT)');
@@ -338,7 +444,7 @@ function addShadedAreaToPlotZT24Hour()
 end
 
 function aggregatedBands = aggregateBands(pooledBands, newBands)
-    if isempty(pooledBands)
+    if isempty(pooledBands)  % If the first set of bands
         aggregatedBands = newBands;
         return;
     end

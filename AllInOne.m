@@ -1,9 +1,13 @@
 %% Combined Script for Histograms and Heat Maps of Spectrograms
 
+% Define channels to analyze (can use [80, 112] for both)
+channelsToAnalyze = 80;
+threshold = 10; % for getting rid of 60 and 120 Hz (10 indicates getting rid of 50-70 and 110-130)
+
 % Define directories for different experimental conditions
-baseDirs = {'/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux', ...
-            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk1', ...
-            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk4'};
+baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/300Lux', ...
+    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk1', ...
+    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk4'};
 
 % Initialize a structure to hold the results for each condition
 resultsSpectrogram = struct();
@@ -47,32 +51,49 @@ for b = 1:length(baseDirs)
                 lightsOnHour = 5;
             end
 
-            % Get channel numbers
+            % Get channel numbers and filter by desired channels
             channels = zeros(1, length(data.StateInfo.fspec));
             for i = 1:length(channels)
                 channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
             end
 
+            % Select only the specified channels to analyze
+            channelIndicesToAnalyze = ismember(channels, channelsToAnalyze);
+
             % Initialize storage for this file's binned data
-            binnedSpecs = cell(1, length(channels)); % Channels
-            nBins = cell(1, length(channels)); % Channels
-            
+            binnedSpecs = cell(1, sum(channelIndicesToAnalyze)); % Channels to analyze
+            nBins = cell(1, sum(channelIndicesToAnalyze));
+
             % Convert StateInfo to struct array specs
             specs = SaveSpectrogramsAsStruct(data.StateInfo);
-            
+
             % Process the spectrogram data
             [bands, epochs] = PowerFreqFromSpecFreqInator(specs, startDatetime);
-            
+
             % Aggregate data for histogram-based analysis
             pooledBands = aggregateBands(pooledBands, bands);
             pooledEpochs = aggregateEpochs(pooledEpochs, epochs);
-            
-            % Process heat map-based data for each channel
-            for i = 1:length(channels)
+
+            % Process heat map-based data for selected channels
+            count = 1;
+            for i = find(channelIndicesToAnalyze)
                 % Extract relevant fields from the spectrogram data
                 spec = data.StateInfo.fspec{1, i}.spec;  % Spectrogram data (power or magnitude)
                 times = data.StateInfo.fspec{1, i}.to;   % Time points in seconds
                 freqs = data.StateInfo.fspec{1, i}.fo;   % Frequencies in Hz
+                
+                % Find indices of frequencies close to 60 Hz and 120 Hz
+                freq_indices_60Hz = find(abs(freqs - 60) <= threshold);
+                freq_indices_120Hz = find(abs(freqs - 120) <= threshold);
+                
+                % Create a copy of the spectral data to modify
+                clean_spec = spec;
+                
+                % Zero out or attenuate power at 60 Hz
+                clean_spec(:, freq_indices_60Hz) = NaN;
+                
+                % Zero out or attenuate power at 120 Hz
+                clean_spec(:, freq_indices_120Hz) = NaN;
 
                 % Adjust times based on the initial start time and lights on hour
                 initialDatetime = startDatetime - hours(lightsOnHour);
@@ -90,29 +111,31 @@ for b = 1:length(baseDirs)
                 for zt = 0:23
                     indices = (adjustedHours == zt);
                     if any(indices)
-                        binnedSpec(zt + 1, :) = mean(spec(indices, :), 1);
+                        binnedSpec(zt + 1, :) = mean(clean_spec(indices, :), 1);
                         nBin(zt + 1) = sum(indices);
                     end
                 end
 
                 % If pooledBinnedSpec for a channel is empty, initialize it with the current binnedSpec
                 if isempty(pooledBinnedSpec)
-                    pooledBinnedSpec{i} = binnedSpec;
+                    pooledBinnedSpec{count} = binnedSpec;
                 else
-                    if length(pooledBinnedSpec) < i || isempty(pooledBinnedSpec{i})
-                        pooledBinnedSpec{i} = binnedSpec;
+                    if length(pooledBinnedSpec) < count || isempty(pooledBinnedSpec{count})
+                        pooledBinnedSpec{count} = binnedSpec;
                     else
                         % Aggregate current file's data into the pooled data for the channel
-                        pooledBinnedSpec{i} = pooledBinnedSpec{i} + binnedSpec;
+                        pooledBinnedSpec{count} = pooledBinnedSpec{count} + binnedSpec;
                     end
                 end
 
                 % If nBins for a channel is empty, initialize it with the current nBin
-                if length(nBins) < i || isempty(nBins{i})
-                    nBins{i} = nBin;
+                if length(nBins) < count || isempty(nBins{count})
+                    nBins{count} = nBin;
                 else
-                    nBins{i} = nBins{i} + nBin;
+                    nBins{count} = nBins{count} + nBin;
                 end
+
+                count = count + 1;
             end
         end
     end
@@ -122,18 +145,19 @@ for b = 1:length(baseDirs)
     resultsSpectrogram.(validCondition).Epochs = pooledEpochs;
     resultsSpectrogram.(validCondition).BinnedSpec = pooledBinnedSpec;
     resultsSpectrogram.(validCondition).Freqs = freqs;
-    resultsSpectrogram.(validCondition).Channels = channels;
+    resultsSpectrogram.(validCondition).Channels = channels(channelIndicesToAnalyze);
 
     %% Plotting histogram-based results for the condition
-    plotPowerVectors(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
-    plotPercentOscillatoryPower(specs, pooledBands, pooledEpochs.HourlyBinIndices, channels, condition);
+    plotPowerVectors(pooledBands, pooledEpochs.HourlyBinIndices, channels(channelIndicesToAnalyze), condition, channelsToAnalyze);
+    plotPercentOscillatoryPower(pooledBands, pooledEpochs.HourlyBinIndices, channels(channelIndicesToAnalyze), condition, channelsToAnalyze);
 
     %% Plotting heat map-based spectrogram for the condition
     numOfHours = 24;
     zt_labels = cellstr(num2str((0:numOfHours-1)'));  % Create ZT labels
-    for i = 1:length(channels)
+    count = 1;
+    for i = find(channelIndicesToAnalyze)
         figure;
-        imagesc(0:23, freqs, squeeze(pooledBinnedSpec{i})');  % Convert ZT hours to x-axis
+        imagesc(0:23, freqs, squeeze(pooledBinnedSpec{count})');  % Convert ZT hours to x-axis
         axis xy;
         xlabel('Zeitgeber Time (ZT)');
         xticks(0:23);  % ZT 0 to 23
@@ -144,12 +168,13 @@ for b = 1:length(baseDirs)
         colormap('jet'); 
         set(gca, 'FontSize', 14);
         grid on;
+        count = count + 1;
     end
 end
 
 %% saving .mat
 matFileName = 'spectrogramMetrics.mat';
-matFolderPath = '/data/Jeremy/Sleepscoring_Data_Noah/Canute';
+matFolderPath = '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute';
 matFilePath = fullfile(matFolderPath, matFileName);
 save(matFilePath, "resultsSpectrogram");
 
@@ -159,86 +184,100 @@ bandnames = {resultsSpectrogram.(conditions{1}).Bands.name};
 numOfHours = 24;
 zt_labels = cellstr(num2str((0:numOfHours-1)'));
 
-% Plot comparisons for power vectors and percent oscillatory power
+% Iterate over specified channels to analyze
 for i = 1:length(resultsSpectrogram.(conditions{1}).Channels)
-    % Histogram-based power vectors comparison
-    figure;
-    sgtitle(['Power Across Conditions - Channel ', num2str(resultsSpectrogram.(conditions{1}).Channels(i))]); 
-    for b = 1:length(bandnames)
-        subplot(4, 3, b);
-        hold on;
-        for c = 1:length(conditions)
-            condition = conditions{c};
-            channels = resultsSpectrogram.(condition).Channels;
-            bands = resultsSpectrogram.(condition).Bands;
+    channel = resultsSpectrogram.(conditions{1}).Channels(i);
 
-            % Assuming this channel for comparison
-            if i <= length(channels)
-                powerData = bands(b).powervectors.HourlyBin(i, :);
-                plotData = cellfun(@mean, powerData);
-                plot(0:numOfHours-1, plotData, 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);
-            end
-        end
-        hold off;
-        xlabel('Zeitgeber Time (ZT)');
-        ylabel('Power');
-        title(bandnames{b});
-        legend show;
-    end
+    if ismember(channel, channelsToAnalyze)  % Check if the channel is in the specified channelsToAnalyze
+        % Histogram-based power vectors comparison
+        figure;
+        sgtitle(['Power Across Conditions - Channel ', num2str(channel)]); 
+        for b = 1:length(bandnames)
+            subplot(4, 3, b);
+            hold on;
+            for c = 1:length(conditions)
+                condition = conditions{c};
+                channels = resultsSpectrogram.(condition).Channels;
+                bands = resultsSpectrogram.(condition).Bands;
 
-    % Histogram-based percent oscillatory power comparison
-    figure;
-    sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(resultsSpectrogram.(conditions{1}).Channels(i))]);
-    for b = 1:length(bandnames)
-        subplot(4, 3, b);
-        hold on;
-        for c = 1:length(conditions)
-            condition = conditions{c};
-            channels = resultsSpectrogram.(condition).Channels;
-            bands = resultsSpectrogram.(condition).Bands;
-
-            totalPower = zeros(numOfHours, 1);
-            percentagePower = zeros(numOfHours, 1);
-            for zt = 0:(numOfHours-1)
-                if ~isempty(bands(b).powervectors.HourlyBin{i, zt+1})
-                    totalPower(zt+1) = totalPower(zt+1) + mean(cellfun(@mean, bands(b).powervectors.HourlyBin(:, zt+1)));
+                % Find the index of the current channel within this condition
+                channelIndex = find(channels == channel, 1);
+                if ~isempty(channelIndex)
+                    powerData = bands(b).powervectors.HourlyBin(channelIndex, :);
+                    plotData = cellfun(@mean, powerData);
+                    plot(0:numOfHours-1, plotData, 'DisplayName', condition);
                 end
             end
+            hold off;
+            xlabel('Zeitgeber Time (ZT)');
+            ylabel('Power');
+            title(bandnames{b});
+            legend show;
+        end
 
-            for zt = 0:(numOfHours-1)
-                if totalPower(zt+1) > 0
-                    if ~isempty(bands(b).powervectors.HourlyBin{i, zt+1})
-                        percentagePower(zt+1) = 100 * mean(cellfun(@mean, bands(b).powervectors.HourlyBin(i, zt+1))) / totalPower(zt+1);
+        % Histogram-based percent oscillatory power comparison
+        figure;
+        sgtitle(['Percent Oscillatory Power Across Conditions - Channel ', num2str(channel)]);
+        for b = 1:length(bandnames)
+            subplot(4, 3, b);
+            hold on;
+            for c = 1:length(conditions)
+                condition = conditions{c};
+                channels = resultsSpectrogram.(condition).Channels;
+                bands = resultsSpectrogram.(condition).Bands;
+
+                totalPower = zeros(numOfHours, 1);
+                percentagePower = zeros(numOfHours, 1);
+                % Identify the correct indices to refer to selected channel
+                channelIndex = find(channels == channel, 1);
+                if ~isempty(channelIndex)
+                    for zt = 0:(numOfHours-1)
+                        if ~isempty(bands(b).powervectors.HourlyBin{channelIndex, zt+1})
+                            totalPower(zt+1) = totalPower(zt+1) + mean(cellfun(@mean, bands(b).powervectors.HourlyBin(:, zt+1)));
+                        end
                     end
+
+                    for zt = 0:(numOfHours-1)
+                        if totalPower(zt+1) > 0
+                            if ~isempty(bands(b).powervectors.HourlyBin{channelIndex, zt+1})
+                                percentagePower(zt+1) = 100 * mean(cellfun(@mean, bands(b).powervectors.HourlyBin(channelIndex, zt+1))) / totalPower(zt+1);
+                            end
+                        end
+                    end
+                    plot(0:numOfHours-1, percentagePower, 'DisplayName', num2str(channel));
                 end
             end
-            plot(0:numOfHours-1, percentagePower, 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);
+            hold off;
+            xlabel('Zeitgeber Time (ZT)');
+            ylabel('Percent Power (%)');
+            title(bandnames{b});
+            legend show;
+        end
+
+        % Heat map-based spectrogram comparison
+        figure;
+        hold on;
+        for c = 1:length(conditions)
+            condition = conditions{c};
+            channels = resultsSpectrogram.(condition).Channels;
+
+            % Locate the correct index for selecting the current channel
+            channelIndex = find(channels == channel, 1);
+            if ~isempty(channelIndex)
+                plotData = squeeze(resultsSpectrogram.(condition).BinnedSpec{channelIndex});
+                plot(0:numOfHours-1, mean(plotData, 2), 'DisplayName', num2str(channel));  % Mean across frequencies for each ZT hour
+            end
         end
         hold off;
+        ylabel('Average Power');
         xlabel('Zeitgeber Time (ZT)');
-        ylabel('Percent Power (%)');
-        title(bandnames{b});
+        title(['Comparison of BinnedSpec Across Conditions - Channel ', num2str(channel)]);
+        xticks(0:23);
+        xticklabels(zt_labels);
         legend show;
+        set(gca, 'FontSize', 14);
+        grid on;
     end
-
-    % Heat map-based spectrogram comparison
-    figure;
-    hold on;
-    for c = 1:length(conditions)
-        condition = conditions{c};
-        channels = resultsSpectrogram.(condition).Channels;
-        plotData = squeeze(resultsSpectrogram.(condition).BinnedSpec{i});
-        plot(0:numOfHours-1, mean(plotData, 2), 'DisplayName', [condition ' - Channel ' num2str(channels(i))]);  % Mean across frequencies for each ZT hour
-    end
-    hold off;
-    ylabel('Average Power');
-    xlabel('Zeitgeber Time (ZT)');
-    title(['Comparison of BinnedSpec Across Conditions - Channel ', num2str(channels(i))]);
-    xticks(0:23);
-    xticklabels(zt_labels);
-    legend show;
-    set(gca, 'FontSize', 14);
-    grid on;
 end
 
 %% Sub-functions
@@ -352,76 +391,84 @@ function [delta_power, spindle_power, theta_power] = getBandPowers(bands, channe
     theta_power = bands(2).powervectors.All{channel};
 end
 
-function plotPowerVectors(specs, bands, hourlyBinIndices, channels, condition)
+function plotPowerVectors(bands, hourlyBinIndices, channels, condition, channelsToAnalyze)
     bandnames = {bands.name};
     numOfHours = 24;
     zt_labels = cellstr(num2str((0:numOfHours-1)'));
 
-    for a = 1:length(specs)
-        figure;
-        sgtitle(['Power Across Bands - Channel ', num2str(channels(a)), ' - ', condition]);
-        plotcounter = 0;
-        for b = 1:length(bandnames)
-            tbandname = bandnames{b};
-            tband = bands(b);
-            plotcounter = plotcounter + 1;
-            subplot(4, 3, plotcounter);
-            hourlyPower = zeros(1, numOfHours);
-            for zt = 0:(numOfHours-1)
-                if ~isempty(hourlyBinIndices{zt+1})
-                    hourlyPower(zt+1) = mean(tband.powervectors.HourlyBin{a, zt+1});
+    for a = 1:length(channels)
+        channel = channels(a);
+        
+        if ismember(channel, channelsToAnalyze)  % Check if the channel is in the specified channelsToAnalyze
+            figure;
+            sgtitle(['Power Across Bands - Channel ', num2str(channel), ' - ', condition]);
+            plotcounter = 0;
+            for b = 1:length(bandnames)
+                tbandname = bandnames{b};
+                tband = bands(b);
+                plotcounter = plotcounter + 1;
+                subplot(4, 3, plotcounter);
+                hourlyPower = zeros(1, numOfHours);
+                for zt = 0:(numOfHours-1)
+                    if ~isempty(hourlyBinIndices{zt+1})
+                        hourlyPower(zt+1) = mean(tband.powervectors.HourlyBin{a, zt+1});
+                    end
                 end
+                plot(0:numOfHours-1, hourlyPower);
+                addShadedAreaToPlotZT24Hour();
+                xlabel('Zeitgeber Time (ZT)');
+                xticks(0:numOfHours-1);
+                xticklabels(zt_labels);
+                ylabel('Power');
+                title(tbandname);
+                axis tight;
             end
-            plot(0:numOfHours-1, hourlyPower);
-            addShadedAreaToPlotZT24Hour();
-            xlabel('Zeitgeber Time (ZT)');
-            xticks(0:numOfHours-1);
-            xticklabels(zt_labels);
-            ylabel('Power');
-            title(tbandname);
-            axis tight;
         end
     end
 end
 
-function plotPercentOscillatoryPower(specs, bands, hourlyBinIndices, channels, condition)
+function plotPercentOscillatoryPower(bands, hourlyBinIndices, channels, condition, channelsToAnalyze)
     bandnames = {bands.name};
     numOfHours = 24;
     zt_labels = cellstr(num2str((0:numOfHours-1)'));
 
-    for a = 1:length(specs)
-        figure;
-        sgtitle(['% Oscillatory Power - Channel ', num2str(channels(a)), ' - ', condition]);
-        plotcounter = 0;
-
-        totalPower = zeros(numOfHours, 1);
-        for b = 1:length(bands)
-            for zt = 0:(numOfHours-1)
-                if ~isempty(hourlyBinIndices{zt+1})
-                    totalPower(zt+1) = totalPower(zt+1) + mean(bands(b).powervectors.HourlyBin{a, zt+1});
-                end
-            end
-        end
+    for a = 1:length(channels)
+        channel = channels(a);
         
-        for b = 1:length(bandnames)
-            tbandname = bandnames{b};
-            tband = bands(b);
-            plotcounter = plotcounter + 1;
-            subplot(4, 3, plotcounter);
-            percentPower = zeros(1, numOfHours);
-            for zt = 0:(numOfHours-1)
-                if ~isempty(hourlyBinIndices{zt+1}) && totalPower(zt+1) > 0
-                    percentPower(zt+1) = 100 * mean(tband.powervectors.HourlyBin{a, zt+1}) / totalPower(zt+1);
+        if ismember(channel, channelsToAnalyze)  % Check if the channel is in the specified channelsToAnalyze
+            figure;
+            sgtitle(['% Oscillatory Power - Channel ', num2str(channel), ' - ', condition]);
+            plotcounter = 0;
+
+            totalPower = zeros(numOfHours, 1);
+            for b = 1:length(bands)
+                for zt = 0:(numOfHours-1)
+                    if ~isempty(hourlyBinIndices{zt+1})
+                        totalPower(zt+1) = totalPower(zt+1) + mean(bands(b).powervectors.HourlyBin{a, zt+1});
+                    end
                 end
             end
-            plot(0:numOfHours-1, percentPower);
-            addShadedAreaToPlotZT24Hour();
-            xlabel('Zeitgeber Time (ZT)');
-            xticks(0:numOfHours-1);
-            xticklabels(zt_labels);
-            ylabel('Percent Power (%)');
-            title(tbandname);
-            axis tight;
+            
+            for b = 1:length(bandnames)
+                tbandname = bandnames{b};
+                tband = bands(b);
+                plotcounter = plotcounter + 1;
+                subplot(4, 3, plotcounter);
+                percentPower = zeros(1, numOfHours);
+                for zt = 0:(numOfHours-1)
+                    if ~isempty(hourlyBinIndices{zt+1}) && totalPower(zt+1) > 0
+                        percentPower(zt+1) = 100 * mean(tband.powervectors.HourlyBin{a, zt+1}) / totalPower(zt+1);
+                    end
+                end
+                plot(0:numOfHours-1, percentPower);
+                addShadedAreaToPlotZT24Hour();
+                xlabel('Zeitgeber Time (ZT)');
+                xticks(0:numOfHours-1);
+                xticklabels(zt_labels);
+                ylabel('Percent Power (%)');
+                title(tbandname);
+                axis tight;
+            end
         end
     end
 end

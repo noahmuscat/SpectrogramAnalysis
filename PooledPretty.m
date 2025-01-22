@@ -1,27 +1,32 @@
-%% Makes pretty, heat mapped spectrograms for All Conditions
-%baseDirs = {'/data/Jeremy/Sleepscoring_Data_Noah/Canute/300Lux', ...
-%            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk1', ...
-%            '/data/Jeremy/Sleepscoring_Data_Noah/Canute/1000LuxWk4'};
+%% IN PROGRESS
 
+%% Gathering and aggregating data
 % Define directories for different experimental conditions
 baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/300Lux', ...
     '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk1', ...
     '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk4'};
 
+% Set the channels to include in the analysis
+channelsToAnalyze = 80; % Set this to desired channel(s) for analysis
+
 % Initialize a structure to hold the results for each condition
 results = struct();
+
+stdDevThreshold = 2; % for eliminating based on stdev
+threshold = 10; % for eliminating 60 and 120 Hz bands
 
 for b = 1:length(baseDirs)
     baseFolder = baseDirs{b};
     [~, condition] = fileparts(baseFolder); % Extract condition name (e.g., '300Lux')
     [~, animalName] = fileparts(fileparts(baseFolder)); % Extract animal name (e.g., 'Canute')
 
-    % Modify condition name to be valid field name
+    % Modify condition name to be a valid field name
     validCondition = ['Cond', condition];
 
-    % Initialize variables for pooled data for this condition
-    % Using cell arrays to handle different sizes of data per channel
-    pooledBinnedSpec = {}; 
+    % Initialize variables for the condition
+    all5MinPower = [];
+    all5MinTimestampsZT = [];
+    all5MinTimestampsEST = [];
     channels = [];
 
     % Get a list of all subfolders in the base folder
@@ -37,130 +42,137 @@ for b = 1:length(baseDirs)
             rootPath = fullfile(matFiles(m).folder, matFiles(m).name);
             data = load(rootPath);
 
-            % Extract start time from the file path
-            [~, folderName, ~] = fileparts(fileparts(rootPath));
-            startDatetime = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
-
+            % Extract start time from the subfolder name
+            [~, folderName, ~] = fileparts(currentSubFolder);
+            startDatetimeEST = datetime(folderName(8:end), 'InputFormat', 'yyMMdd_HHmmss', 'TimeZone', 'America/New_York');
+            
             % Determine the DST offset
-            isDST = isdst(startDatetime);
-            if isDST
-                lightsOnHour = 6;
-            else
-                lightsOnHour = 5;
-            end
+            isDST = isdst(startDatetimeEST);
+            lightsOnHour = isDST * 6 + ~isDST * 5;
 
-            % Get channel numbers
+            % Get the channel numbers
             channels = zeros(1, length(data.StateInfo.fspec));
             for i = 1:length(channels)
                 channels(1, i) = data.StateInfo.fspec{1,i}.info.Ch;
             end
 
-            % Initialize storage for this file's binned data
-            binnedSpecs = cell(1, length(channels)); % Channels
-            nBins = cell(1, length(channels)); % Channels
+            % Logical index for the channels to analyze
+            channelIndicesToAnalyze = ismember(channels, channelsToAnalyze);
 
             % Loop over the specified channels
-            for i = 1:length(channels)
+            for i = find(channelIndicesToAnalyze)
                 % Extract relevant fields
-                spec = data.StateInfo.fspec{1, i}.spec; % Spectrogram data (power or magnitude)
-                times = data.StateInfo.fspec{1, i}.to; % Time points in seconds
-                freqs = data.StateInfo.fspec{1, i}.fo; % Frequencies in Hz
+                spec = data.StateInfo.fspec{1, i}.spec;  % Spectrogram data
+                freqs = data.StateInfo.fspec{1, i}.fo;   % Frequencies in Hz
+                times = data.StateInfo.fspec{1, i}.to;   % Time points in seconds
 
-                % Adjust times based on the initial start time and lights on hour
-                initialDatetime = startDatetime - hours(lightsOnHour);
-                adjustedDatetimes = initialDatetime + seconds(times);
+                % Zero out or attenuate power at 60 Hz and 120 Hz
+                clean_spec = spec;
+                clean_spec(:, ismember(round(freqs), [60, 120])) = NaN;
 
-                % Determine ZT hours for each data point
-                adjustedHours = hour(adjustedDatetimes); % Extract the hour part of the adjusted times
+                % Adjust times based on lights on hour for ZT time
+                initialDatetimeZT = startDatetimeEST - hours(lightsOnHour);
+                adjustedDatetimesZT = initialDatetimeZT + seconds(times);
+                adjustedDatetimesEST = startDatetimeEST + seconds(times);
 
-                % Initialize variables for binning
-                numOfHours = 24; % ZT 0 to 23
-                binnedSpec = zeros(numOfHours, length(freqs)); % Rows for each ZT hour, columns for frequencies
-                nBin = zeros(1, numOfHours); % Count of data points in each bin
+                % Initialize variables for 5-minute bins
+                fiveMinBinSize = 300; % 5 minutes in seconds
+                numOf5MinBins = ceil(max(times) / fiveMinBinSize);
+                fiveMinPower = zeros(numOf5MinBins, length(freqs));
+                timestampsZT = NaT(numOf5MinBins, 1, 'TimeZone', 'America/New_York');
+                timestampsEST = NaT(numOf5MinBins, 1, 'TimeZone', 'America/New_York');
 
-                % Average power for each frequency in each ZT hour bin
-                for zt = 0:23
-                    indices = (adjustedHours == zt);
+                % Bin power in each 5-minute interval
+                for bin = 1:numOf5MinBins
+                    indices = (times >= (bin-1) * fiveMinBinSize) & (times < bin * fiveMinBinSize);
                     if any(indices)
-                        binnedSpec(zt + 1, :) = mean(spec(indices, :), 1);
-                        nBin(zt + 1) = sum(indices);
+                        currentSpec = clean_spec(indices, :);
+                        fiveMinPower(bin, :) = mean(currentSpec, 1, 'omitnan');
+                        timestampsZT(bin) = initialDatetimeZT + seconds((bin-1) * fiveMinBinSize);
+                        timestampsEST(bin) = startDatetimeEST + seconds((bin-1) * fiveMinBinSize);
                     end
                 end
 
-                % If pooledBinnedSpec for a channel is empty, initialize it with the current binnedSpec
-                if isempty(pooledBinnedSpec)
-                    pooledBinnedSpec{i} = binnedSpec;
-                else
-                    if length(pooledBinnedSpec) < i || isempty(pooledBinnedSpec{i})
-                        pooledBinnedSpec{i} = binnedSpec;
-                    else
-                        % Aggregate current file's data into the pooled data for the channel
-                        pooledBinnedSpec{i} = pooledBinnedSpec{i} + binnedSpec;
-                    end
-                end
-
-                % If nBins for a channel is empty, initialize it with the current nBin
-                if length(nBins) < i || isempty(nBins{i})
-                    nBins{i} = nBin;
-                else
-                    nBins{i} = nBins{i} + nBin;
-                end
+                % Concatenate results across files for the condition
+                all5MinPower = [all5MinPower; fiveMinPower];
+                all5MinTimestampsZT = [all5MinTimestampsZT; timestampsZT];
+                all5MinTimestampsEST = [all5MinTimestampsEST; timestampsEST];
             end
         end
     end
 
-    % No normalization, just accumulate data directly
-
     % Store results for the condition
-    results.(validCondition).BinnedSpec = pooledBinnedSpec;
+    results.(validCondition).FiveMinPower = all5MinPower;
+    results.(validCondition).TimestampsZT = all5MinTimestampsZT;
+    results.(validCondition).TimestampsEST = all5MinTimestampsEST;
     results.(validCondition).Freqs = freqs;
-    results.(validCondition).Channels = channels;
-
-    %% Plotting spectrogram for the condition
-    numOfHours = 24;
-    zt_labels = cellstr(num2str((0:numOfHours-1)')); % Create ZT labels
-    for i = 1:length(channels)
-        figure;
-        imagesc(0:23, freqs, squeeze(pooledBinnedSpec{i})'); % Convert ZT hours to x-axis
-        axis xy;
-        xlabel('Zeitgeber Time (ZT)');
-        xticks(0:23); % ZT 0 to 23
-        xticklabels(zt_labels);
-        ylabel('Frequency (Hz)');
-        title(['Spectrogram - Channel ', num2str(channels(i)), ' - ', condition]);
-        colorbar;
-        colormap('jet'); 
-        set(gca, 'FontSize', 14);
-        grid on;
-    end
+    results.(validCondition).Channels = channels(channelIndicesToAnalyze);
 end
 
-%% Comparisons Across Conditions
-conditions = fieldnames(results);
-comparisonMetrics = {'BinnedSpec'};
-numOfHours = 24;
-zt_labels = cellstr(num2str((0:numOfHours-1)'));
+%% saving data
+save('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/metrics.mat', 'results');
 
-% Plot comparisons
-for metric = 1:length(comparisonMetrics)
-    metricName = comparisonMetrics{metric};
-    for i = 1:length(results.(conditions{1}).Channels)
-        figure;
-        hold on;
-        for c = 1:length(conditions)
-            condition = conditions{c};
-            channels = results.(condition).Channels;
-            plotData = squeeze(results.(condition).(metricName){i});
-            plot(0:numOfHours-1, mean(plotData, 2), 'DisplayName', [condition ' - Channel ' num2str(channels(i))]); % Mean across frequencies for each ZT hour
+
+%% plotting data
+conditions = fieldnames(results);
+
+for c = 1:length(conditions)
+    condition = conditions{c};
+    condData = results.(condition);
+    
+    % Extract data for the current condition
+    powerData = condData.FiveMinPower;
+    timestampsZT = condData.TimestampsZT;
+    freqs = condData.Freqs;
+    
+    % Find indices of frequencies to be set to NaN
+    noiseBands = (freqs >= 50 & freqs <= 70) | (freqs >= 110 & freqs <= 130);
+    powerData(:, noiseBands) = NaN;  % Set noise ranges to NaN
+
+    % Determine the start day (Day 1) and split by day
+    days = unique(dateshift(timestampsZT, 'start', 'day'));
+    
+    for d = 1:length(days)
+        dayStart = days(d);
+        dayEnd = dayStart + duration(24, 0, 0);  % End of the current day
+        
+        % Index for the data of the current day
+        dayIndices = (timestampsZT >= dayStart) & (timestampsZT < dayEnd);
+        
+        if any(dayIndices)
+            dayPowerData = powerData(dayIndices, :);
+            dayTimestampsZT = timestampsZT(dayIndices);
+            
+            % Calculate the number of data points for this day
+            numDataPoints = sum(dayIndices);
+            
+            % Determine ZT hours for x-axis labels as a difference in time
+            ztHours = hour(dayTimestampsZT);
+            
+            % Create spectrogram plot for the current day
+            figure;
+            imagesc(ztHours, freqs, dayPowerData');
+            axis xy;
+            xlabel('ZT Hour', 'FontSize', 14);
+            ylabel('Frequency (Hz)', 'FontSize', 14);
+            title(['Spectrogram - ', condition, ' - Day ', num2str(d), ' (N = ', num2str(numDataPoints), ')'], 'FontSize', 16);
+            colorbar;
+            colormap('jet');
+            ylim([min(freqs) max(freqs)]);
+            set(gca, 'FontSize', 12);
+            xticks(0:23);
+            xticklabels(0:23);  % Label x-axis with ZT hours 0-23
+            grid on;
+
+            hTitle = get(gca, 'Title'); % Get the title handle
+            titleText = get(hTitle, 'String'); % Extract the title string
+            formattedTitle = regexprep(titleText, '[^\w]', '_'); % Replace invalid characters with underscores
+            saveDir = '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute';
+
+            fullPath = fullfile(saveDir, [formattedTitle, '.png']);
+            saveas(gcf, fullPath); % Save the current figure
+
+
         end
-        hold off;
-        ylabel('Average Power');
-        xlabel('Zeitgeber Time (ZT)');
-        title(['Comparison of ', metricName, ' Across Conditions - Channel ', num2str(channels(i))]);
-        xticks(0:23);
-        xticklabels(zt_labels);
-        legend show;
-        set(gca, 'FontSize', 14);
-        grid on;
     end
 end

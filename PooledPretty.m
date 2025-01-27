@@ -1,4 +1,10 @@
 %% IN PROGRESS
+% TODO:
+% 1) fix error where it displays many ZT hours even across only a few 5 minute
+% bins
+% 2) fix outliers
+% log transform the power
+% 3) change colormap to parula
 
 %% Gathering and aggregating data
 % Define directories for different experimental conditions

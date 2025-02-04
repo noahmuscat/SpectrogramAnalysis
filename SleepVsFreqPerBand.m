@@ -13,7 +13,7 @@ startStopFreqs = {[0.5, 4], [5, 10], [11, 19], [20, 30], [30, 40]};
 
 % Possible sleep states: Wake (1), NREM (3), REM (5)
 sleepStatesUnique = [1, 3, 5];
-sleepStateNames = {'WAKE', 'NREM', 'REM'};
+sleepStateNames = {'W', 'NR', 'R'};
 
 channelsToAnalyze = 80;
 
@@ -96,22 +96,26 @@ for b = 1:length(baseDirs)
     end
 end
 
-% Generate figures for each frequency band
+%% Generate figures for each frequency band
 for bandIdx = 1:length(bandNames)
-    formattedTitle = ['Frequency Band: ', bandNames{bandIdx}];
-    figure('Name', formattedTitle);
+    formattedTitle = [bandNames{bandIdx}];
+    figure;
     bandPowers = squeeze(bandConditionPowers(bandIdx, :, :));
+    
+    % Calculate the maximum value for y-axis limit
+    maxYLim = max(bandPowers, [], 'all');
     
     % Create subplots for each condition
     for c = 1:length(baseDirs)
         subplot(1, length(baseDirs), c);
         bar(bandPowers(c, :));
         title(allConditions{c});
-        xlabel('Sleep State');
         xticks(1:3);
         xticklabels(sleepStateNames);
         ylabel('Raw Power');
+        ylim([0, maxYLim]); % Set the same y-axis limit for all subplots
     end
+    sgtitle(formattedTitle);
     fullPath = fullfile(saveDir, [formattedTitle, '.png']);
-    saveas(gcf, fullPath); % Save the current figure
+    saveas(gcf, fullPath);
 end

@@ -90,8 +90,17 @@ for b = 1:length(baseDirs)
         % Compute raw power for each frequency band
         for bandIdx = 1:length(startStopFreqs)
             bandFreqs = startStopFreqs{bandIdx};
-            bandPower = sum(stateSpectrogram(:, allFreqs >= bandFreqs(1) & allFreqs <= bandFreqs(2)), 'all');
-            bandConditionPowers(bandIdx, b, s) = bandPower;
+            % Logical index to find columns that fall within the current frequency band
+            freqIndices = (allFreqs >= bandFreqs(1)) & (allFreqs <= bandFreqs(2));
+            
+            if any(freqIndices)
+                % Sum over time (rows) and frequencies (columns) within the band
+                bandPower = sum(stateSpectrogram(:, freqIndices), 'all');
+                bandConditionPowers(bandIdx, b, s) = bandPower;
+            else
+                % If no frequencies fall within the band, set power to zero or handle appropriately
+                bandConditionPowers(bandIdx, b, s) = 0;
+            end
         end
     end
 end

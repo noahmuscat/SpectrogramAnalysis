@@ -3,6 +3,8 @@ baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysA
     '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk1', ...
     '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk4'};
 
+saveDir = '/Users/noahmuscat/Desktop';
+
 % Define frequency bands and their corresponding names
 bandNames = {'delta', 'theta', 'spindle', 'lowbeta', 'highbeta'};
 startStopFreqs = {[0.5, 4], [5, 10], [11, 19], [20, 30], [30, 40]};
@@ -90,13 +92,26 @@ for b = 1:length(baseDirs)
         totalPowerSelectedBands = 0;
         for bandIdx = 1:length(startStopFreqs)
             bandFreqs = startStopFreqs{bandIdx};
-            bandPower = sum(stateSpectrogram(:, allFreqs >= bandFreqs(1) & allFreqs <= bandFreqs(2)), 'all');
-            percentPowers(s, bandIdx) = bandPower;
-            totalPowerSelectedBands = totalPowerSelectedBands + bandPower;
+            % Find the indices of frequencies that fall within the current band
+            freqIndices = (allFreqs >= bandFreqs(1)) & (allFreqs <= bandFreqs(2));
+            
+            if any(freqIndices)
+                % Compute the power for the current band
+                bandPower = sum(stateSpectrogram(:, freqIndices), 'all');
+                percentPowers(s, bandIdx) = bandPower;
+                totalPowerSelectedBands = totalPowerSelectedBands + bandPower;
+            else
+                % If no frequencies fall within the current band, set power to zero
+                percentPowers(s, bandIdx) = 0;
+            end
         end
 
         % Normalize the power across the selected bands
-        percentPowers(s, :) = (percentPowers(s, :) / totalPowerSelectedBands) * 100;
+        if totalPowerSelectedBands > 0
+            percentPowers(s, :) = (percentPowers(s, :) / totalPowerSelectedBands) * 100;
+        else
+            percentPowers(s, :) = 0; % Handle case where no power is observed
+        end
     end
 
     % Plot the data for the current condition
@@ -110,3 +125,7 @@ for b = 1:length(baseDirs)
     ylabel('% Power');
     ylim([0, 100]);
 end
+
+formattedTitle = 'SleepVsFreqAll';
+fullPath = fullfile(saveDir, [formattedTitle, '.png']);
+saveas(gcf, fullPath);

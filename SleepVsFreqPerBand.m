@@ -95,7 +95,7 @@ for b = 1:length(baseDirs)
             
             if any(freqIndices)
                 % Sum over time (rows) and frequencies (columns) within the band
-                bandPower = sum(stateSpectrogram(:, freqIndices), 'all');
+                bandPower = mean(stateSpectrogram(:, freqIndices), 'all');
                 bandConditionPowers(bandIdx, b, s) = bandPower;
             else
                 % If no frequencies fall within the band, set power to zero

@@ -97,7 +97,7 @@ for b = 1:length(baseDirs)
             
             if any(freqIndices)
                 % Compute the power for the current band
-                bandPower = sum(stateSpectrogram(:, freqIndices), 'all');
+                bandPower = mean(stateSpectrogram(:, freqIndices), 'all');
                 percentPowers(s, bandIdx) = bandPower;
                 totalPowerSelectedBands = totalPowerSelectedBands + bandPower;
             else

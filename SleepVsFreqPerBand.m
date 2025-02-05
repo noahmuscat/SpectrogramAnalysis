@@ -98,7 +98,7 @@ for b = 1:length(baseDirs)
                 bandPower = sum(stateSpectrogram(:, freqIndices), 'all');
                 bandConditionPowers(bandIdx, b, s) = bandPower;
             else
-                % If no frequencies fall within the band, set power to zero or handle appropriately
+                % If no frequencies fall within the band, set power to zero
                 bandConditionPowers(bandIdx, b, s) = 0;
             end
         end

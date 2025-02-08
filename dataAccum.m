@@ -1,5 +1,3 @@
-%% working code
-
 % Define the base directories for each condition
 baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/300Lux', ...
             '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk1', ...
@@ -75,8 +73,9 @@ for i = 1:length(conditions)
                     dataStruct.MetaData.fo = fo; % Save frequencies once
                 end
 
-                % Each row of 'spec' corresponds to the frequency power at a specific time point
-                for t = 1:size(spec, 1)
+                % Append power data only if timestamps and states are valid
+                numRecords = numel(appropriateTimestamps);
+                for t = 1:min(size(spec, 1), numRecords) % Choose the minimum
                     dataStruct.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
                 end
             else
@@ -85,6 +84,12 @@ for i = 1:length(conditions)
         else
             warning("EEG file not found: %s", eegFile);
         end
+    end
+    
+    % Ensure consistency across all data fields
+    numEntries = length(dataStruct.(validCondition).Datetime);
+    if length(dataStruct.(validCondition).FrequencyPower) > numEntries
+        dataStruct.(validCondition).FrequencyPower = dataStruct.(validCondition).FrequencyPower(1:numEntries);
     end
 end
 

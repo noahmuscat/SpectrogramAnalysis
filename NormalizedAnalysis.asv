@@ -1,0 +1,42 @@
+% Create spectrograms for each condition
+conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
+freqs = CanuteCombined.MetaData.fo;
+
+% Set up the figure
+figure;
+
+% Iterate over each condition to plot the spectrogram
+for condIdx = 1:length(conditions)
+    cond_data = CanuteCombined.(conditions{condIdx});
+    zscoreFreqPower = cond_data.ZscoredFrequencyPower;
+    zt_time = cond_data.ZT_time;
+    
+    % Initialize a matrix to accumulate frequency power for each ZT hour
+    powerMatrix = zeros(length(freqs), 24); % 24 ZT hours
+    
+    % Accumulator for the number of entries per ZT hour for averaging
+    countMatrix = zeros(length(freqs), 24);
+    
+    % Accumulate power data
+    for idx = 1:length(zscoreFreqPower)
+        hour = zt_time(idx) + 1; % Convert ZT time to 1-based indexing
+        powerMatrix(:, hour) = powerMatrix(:, hour) + zscoreFreqPower{idx};
+        countMatrix(:, hour) = countMatrix(:, hour) + 1;
+    end
+    
+    % Average the accumulated power by dividing by the count
+    averagedPowerMatrix = powerMatrix ./ countMatrix;
+    
+    % Plot
+    subplot(3, 1, condIdx); % subplot for each condition
+    imagesc(0:23, freqs, averagedPowerMatrix);
+    set(gca, 'YDir', 'normal');
+    colormap('parula');
+    colorbar;
+    xlabel('Zeitgeber Time (ZT)');
+    ylabel('Frequency (Hz)');
+    title(['Spectrogram for ' conditions{condIdx}]);
+end
+
+% Adjust figure
+sgtitle('Z-Scored Frequency Power Spectrograms by Condition');

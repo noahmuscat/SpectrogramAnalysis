@@ -4,11 +4,11 @@ baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysA
             '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk4'};
 
 % Initialize the main structure
-dataStruct = struct();
-dataStruct.MetaData = struct();
-dataStruct.MetaData.Ch = 80; % Channel of interest
-dataStruct.MetaData.Rat = 'Canute';
-dataStruct.MetaData.fo = []; % Initialize MetaData.fo as an empty array
+CanuteCombined = struct();
+CanuteCombined.MetaData = struct();
+CanuteCombined.MetaData.Ch = 80; % Channel of interest
+CanuteCombined.MetaData.Rat = 'Canute';
+CanuteCombined.MetaData.fo = []; % Initialize MetaData.fo as an empty array
 
 % Define each condition's data structure
 conditions = {'300Lux', '1000LuxWk1', '1000LuxWk4'};
@@ -18,11 +18,11 @@ for i = 1:length(conditions)
     validCondition = validConditions{i};
     
     % Initialize fields for each condition
-    dataStruct.(validCondition) = struct();
-    dataStruct.(validCondition).Datetime = datetime.empty();
-    dataStruct.(validCondition).ZT_time = [];
-    dataStruct.(validCondition).SleepState = [];
-    dataStruct.(validCondition).FrequencyPower = {}; % Cell array for power spectra
+    CanuteCombined.(validCondition) = struct();
+    CanuteCombined.(validCondition).Datetime = datetime.empty();
+    CanuteCombined.(validCondition).ZT_time = [];
+    CanuteCombined.(validCondition).SleepState = [];
+    CanuteCombined.(validCondition).FrequencyPower = {}; % Cell array for power spectra
 
     % List all subdirectories for each condition
     dayDirs = dir(baseDirs{i});
@@ -50,9 +50,9 @@ for i = 1:length(conditions)
             [appropriateTimestamps, ZTData] = getDataFromMatFile(sleepFile);
             
             % Append to pooled data
-            dataStruct.(validCondition).Datetime = [dataStruct.(validCondition).Datetime; appropriateTimestamps];
-            dataStruct.(validCondition).ZT_time = [dataStruct.(validCondition).ZT_time; ZTData.ZT_Hour];
-            dataStruct.(validCondition).SleepState = [dataStruct.(validCondition).SleepState; ZTData.Sleep_State];
+            CanuteCombined.(validCondition).Datetime = [CanuteCombined.(validCondition).Datetime; appropriateTimestamps];
+            CanuteCombined.(validCondition).ZT_time = [CanuteCombined.(validCondition).ZT_time; ZTData.ZT_Hour];
+            CanuteCombined.(validCondition).SleepState = [CanuteCombined.(validCondition).SleepState; ZTData.Sleep_State];
         else
             warning("SleepState file not found: %s", sleepFile);
         end
@@ -69,14 +69,14 @@ for i = 1:length(conditions)
                 fo = eegData.StateInfo.fspec{1, chIdx}.fo; % Fx1
 
                 % Ensure MetaData has frequencies
-                if isempty(dataStruct.MetaData.fo)
-                    dataStruct.MetaData.fo = fo; % Save frequencies once
+                if isempty(CanuteCombined.MetaData.fo)
+                    CanuteCombined.MetaData.fo = fo; % Save frequencies once
                 end
 
                 % Append power data only if timestamps and states are valid
                 numRecords = numel(appropriateTimestamps);
                 for t = 1:min(size(spec, 1), numRecords) % Choose the minimum
-                    dataStruct.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
+                    CanuteCombined.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
                 end
             else
                 warning("Channel 80 not found in EEG data for folder: %s", folderName);
@@ -87,14 +87,83 @@ for i = 1:length(conditions)
     end
     
     % Ensure consistency across all data fields
-    numEntries = length(dataStruct.(validCondition).Datetime);
-    if length(dataStruct.(validCondition).FrequencyPower) > numEntries
-        dataStruct.(validCondition).FrequencyPower = dataStruct.(validCondition).FrequencyPower(1:numEntries);
+    numEntries = length(CanuteCombined.(validCondition).Datetime);
+    if length(CanuteCombined.(validCondition).FrequencyPower) > numEntries
+        CanuteCombined.(validCondition).FrequencyPower = CanuteCombined.(validCondition).FrequencyPower(1:numEntries);
     end
 end
 
+%% Normalization
+% Access data from Cond_300Lux to normalize
+luxField = 'Cond_300Lux';
+data300Lux = CanuteCombined.(luxField);
+
+% Get the last 4 days of data for 300Lux condition
+datetime_list = data300Lux.Datetime;
+endTime = datetime_list(end);
+startTime = endTime - days(4);
+
+% Filter these last 4 days' data
+last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
+last4DaysZT = data300Lux.ZT_time(last4DaysMask);
+last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
+
+% Initialize containers for means and stds
+mean_day = zeros(size(CanuteCombined.MetaData.fo));
+std_day = zeros(size(CanuteCombined.MetaData.fo));
+mean_night = zeros(size(CanuteCombined.MetaData.fo));
+std_night = zeros(size(CanuteCombined.MetaData.fo));
+
+% Calculate mean and std dev for each frequency during day and night
+for freqIdx = 1:length(CanuteCombined.MetaData.fo)
+    % Day time data
+    dayMask = (last4DaysZT >= 0) & (last4DaysZT <= 11);
+    dayData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(dayMask), 'UniformOutput', false));
+    mean_day(freqIdx) = mean(dayData, 'omitnan');
+    std_day(freqIdx) = std(dayData, 'omitnan');
+    
+    % Night time data
+    nightMask = (last4DaysZT >= 12) & (last4DaysZT <= 23);
+    nightData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(nightMask), 'UniformOutput', false));
+    mean_night(freqIdx) = mean(nightData, 'omitnan');
+    std_night(freqIdx) = std(nightData, 'omitnan');
+end
+
+% Define a function to perform z-scoring
+zscore_frequency = @(power, mean_val, std_val) (power - mean_val) ./ std_val;
+
+% Iterate over all conditions and normalize
+conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
+
+for cond = 1:length(conditions)
+    cond_data = CanuteCombined.(conditions{cond});
+    % Initialize a cell array to store z-scored FrequencyPower
+    zscoreFreqPower = cell(size(cond_data.FrequencyPower));
+    
+    for idx = 1:length(cond_data.FrequencyPower)
+        % Determine if current time is day or night
+        isDay = (cond_data.ZT_time(idx) >= 0 && cond_data.ZT_time(idx) <= 11);
+        
+        % Choose relevant mean and std
+        if isDay
+            mean_usage = mean_day;
+            std_usage = std_day;
+        else
+            mean_usage = mean_night;
+            std_usage = std_night;
+        end
+        
+        % Calculate z-score for this time point
+        powerArray = cond_data.FrequencyPower{idx};
+        zscoreFreqPower{idx} = zscore_frequency(powerArray, mean_usage, std_usage);
+    end
+    
+    % Store the z-scored data
+    CanuteCombined.(conditions{cond}).ZscoredFrequencyPower = zscoreFreqPower;
+end
+
 %% Save the structured data to a .mat file (v7.3 cuz its too big)
-save('Canute_combined_data.mat', 'dataStruct', '-v7.3');
+save('CanuteCombinedData.mat', 'CanuteCombined', '-v7.3');
 
 %% functions
 function ZTHour = calculateZT(timestamp)

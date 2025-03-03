@@ -12,7 +12,7 @@ conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
 conditionTitles = {'300 Lux', '1000 Lux Week 1', '1000 Lux Week 4'};
 
 % Get frequency indices from 0 to 40 Hz
-freqIndices = dataStruct.MetaData.fo <= 40;
+freqIndices = HaraldCombined.MetaData.fo <= 40;
 upperLimit = 50; % Remove any powers above this limit
 
 % Loop through each condition
@@ -25,13 +25,13 @@ for c = 1:length(conditions)
         state = stateValues(s);
         
         % Identify day and night indices separately
-        dayIdx = dataStruct.(condition).ZT_time >= 0 & dataStruct.(condition).ZT_time < 12 & dataStruct.(condition).SleepState == state;
-        nightIdx = dataStruct.(condition).ZT_time >= 12 & dataStruct.(condition).ZT_time < 24 & dataStruct.(condition).SleepState == state;
+        dayIdx = HaraldCombined.(condition).ZT_time >= 0 & HaraldCombined.(condition).ZT_time < 12 & HaraldCombined.(condition).SleepState == state;
+        nightIdx = HaraldCombined.(condition).ZT_time >= 12 & HaraldCombined.(condition).ZT_time < 24 & HaraldCombined.(condition).SleepState == state;
 
         % Ensure there are data points
         if any(dayIdx)
             % Gather power data for day, eliminating powers above the set limit
-            dayPowerData = cat(2, dataStruct.(condition).FrequencyPower{dayIdx});
+            dayPowerData = cat(2, HaraldCombined.(condition).FrequencyPower{dayIdx});
             dayPowerData(dayPowerData > upperLimit) = NaN;
 
             % Compute mean power for the day
@@ -39,7 +39,7 @@ for c = 1:length(conditions)
 
             % Plot for day
             subplot(3, 2, 2*s-1);
-            plot(dataStruct.MetaData.fo(freqIndices), dayPower(freqIndices));
+            plot(HaraldCombined.MetaData.fo(freqIndices), dayPower(freqIndices));
             xlabel('Frequency (Hz)');
             ylabel('Power');
             title(sprintf('%s - Day', sleepStates{s}));
@@ -47,7 +47,7 @@ for c = 1:length(conditions)
 
         if any(nightIdx)
             % Gather power data for night, eliminating powers above the set limit
-            nightPowerData = cat(2, dataStruct.(condition).FrequencyPower{nightIdx});
+            nightPowerData = cat(2, HaraldCombined.(condition).FrequencyPower{nightIdx});
             nightPowerData(nightPowerData > upperLimit) = NaN;
 
             % Compute mean power for the night
@@ -55,7 +55,7 @@ for c = 1:length(conditions)
 
             % Plot for night
             subplot(3, 2, 2*s);
-            plot(dataStruct.MetaData.fo(freqIndices), nightPower(freqIndices));
+            plot(HaraldCombined.MetaData.fo(freqIndices), nightPower(freqIndices));
             xlabel('Frequency (Hz)');
             ylabel('Power');
             title(sprintf('%s - Night', sleepStates{s}));

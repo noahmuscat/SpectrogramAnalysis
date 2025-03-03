@@ -1,7 +1,7 @@
 % Define the base directories for each condition
-baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/300Lux', ...
-            '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk1', ...
-            '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/SampleFiles/Canute/1000LuxWk4'};
+baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/300Lux', ...
+            '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/1000LuxWk1', ...
+            '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/1000LuxWk4'};
 
 % Initialize the main structure
 CanuteCombined = struct();
@@ -94,76 +94,66 @@ for i = 1:length(conditions)
 end
 
 %% Normalization
-% Access data from Cond_300Lux to normalize
+numStdDevs = 4;  % Number of standard deviations for outlier detection
 luxField = 'Cond_300Lux';
 data300Lux = CanuteCombined.(luxField);
 
-% Get the last 4 days of data for 300Lux condition
+% Calculate timeframe
 datetime_list = data300Lux.Datetime;
 endTime = datetime_list(end);
 startTime = endTime - days(4);
 
-% Filter these last 4 days' data
+% Last 4 days' data
 last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
 last4DaysZT = data300Lux.ZT_time(last4DaysMask);
 last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
 
-% Initialize containers for means and stds
+% Mean and STD holders
 mean_day = zeros(size(CanuteCombined.MetaData.fo));
 std_day = zeros(size(CanuteCombined.MetaData.fo));
 mean_night = zeros(size(CanuteCombined.MetaData.fo));
 std_night = zeros(size(CanuteCombined.MetaData.fo));
 
-% Calculate mean and std dev for each frequency during day and night
+% Compute mean and std dev per frequency
 for freqIdx = 1:length(CanuteCombined.MetaData.fo)
-    % Day time data
     dayMask = (last4DaysZT >= 0) & (last4DaysZT <= 11);
     dayData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(dayMask), 'UniformOutput', false));
     mean_day(freqIdx) = mean(dayData, 'omitnan');
     std_day(freqIdx) = std(dayData, 'omitnan');
     
-    % Night time data
     nightMask = (last4DaysZT >= 12) & (last4DaysZT <= 23);
     nightData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(nightMask), 'UniformOutput', false));
     mean_night(freqIdx) = mean(nightData, 'omitnan');
     std_night(freqIdx) = std(nightData, 'omitnan');
 end
 
-% Define a function to perform z-scoring
-zscore_frequency = @(power, mean_val, std_val) (power - mean_val) ./ std_val;
+% Define normalization function with outlier removal
+function z_power = zscore_with_outlier_removal(power, mean_val, std_val, numStdDevs)
+    z_power = (power - mean_val) ./ std_val;
+    outlier_mask = abs(z_power) <= numStdDevs;
+    z_power(~outlier_mask) = NaN;  % Remove outliers by setting them to NaN
+end
 
-% Iterate over all conditions and normalize
+% Normalize each condition
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
-
 for cond = 1:length(conditions)
     cond_data = CanuteCombined.(conditions{cond});
-    % Initialize a cell array to store z-scored FrequencyPower
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
-        % Determine if current time is day or night
         isDay = (cond_data.ZT_time(idx) >= 0 && cond_data.ZT_time(idx) <= 11);
+        mean_usage = isDay * mean_day + ~isDay * mean_night;
+        std_usage = isDay * std_day + ~isDay * std_night;
         
-        % Choose relevant mean and std
-        if isDay
-            mean_usage = mean_day;
-            std_usage = std_day;
-        else
-            mean_usage = mean_night;
-            std_usage = std_night;
-        end
-        
-        % Calculate z-score for this time point
         powerArray = cond_data.FrequencyPower{idx};
-        zscoreFreqPower{idx} = zscore_frequency(powerArray, mean_usage, std_usage);
+        zscoreFreqPower{idx} = zscore_with_outlier_removal(powerArray, mean_usage, std_usage, numStdDevs);
     end
     
-    % Store the z-scored data
     CanuteCombined.(conditions{cond}).ZscoredFrequencyPower = zscoreFreqPower;
 end
 
-%% Save the structured data to a .mat file (v7.3 cuz its too big)
-save('CanuteCombinedData.mat', 'CanuteCombined', '-v7.3');
+%% Save Processed Data
+save('CanuteCombinedDataOutliersRemoved.mat', 'CanuteCombined', '-v7.3');
 
 %% functions
 function ZTHour = calculateZT(timestamp)

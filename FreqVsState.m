@@ -1,6 +1,7 @@
 % Load the .mat file
-% load('Canute_combined_data.mat');
+load('HaraldCombinedDataOutliersRemoved.mat');
 
+%% 
 saveDir = '/Users/noahmuscat/Desktop';
 
 % Define sleep state values and labels

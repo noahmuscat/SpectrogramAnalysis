@@ -20,7 +20,7 @@ for i = 1:length(conditions)
     % Initialize fields for each condition
     CanuteCombined.(validCondition) = struct();
     CanuteCombined.(validCondition).Datetime = datetime.empty();
-    CanuteCombined.(validCondition).ZT_time = [];
+    CanuteCombined.(validCondition).ZT_Datetime = [];
     CanuteCombined.(validCondition).SleepState = [];
     CanuteCombined.(validCondition).FrequencyPower = {}; % Cell array for power spectra
 
@@ -51,7 +51,7 @@ for i = 1:length(conditions)
             
             % Append to pooled data
             CanuteCombined.(validCondition).Datetime = [CanuteCombined.(validCondition).Datetime; appropriateTimestamps];
-            CanuteCombined.(validCondition).ZT_time = [CanuteCombined.(validCondition).ZT_time; ZTData.ZT_Hour];
+            CanuteCombined.(validCondition).ZT_Datetime = [CanuteCombined.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
             CanuteCombined.(validCondition).SleepState = [CanuteCombined.(validCondition).SleepState; ZTData.Sleep_State];
         else
             warning("SleepState file not found: %s", sleepFile);
@@ -105,7 +105,7 @@ startTime = endTime - days(4);
 
 % Last 4 days' data
 last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
-last4DaysZT = data300Lux.ZT_time(last4DaysMask);
+last4DaysZT = data300Lux.ZT_Datetime(last4DaysMask);
 last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
 
 % Mean and STD holders
@@ -116,12 +116,12 @@ std_night = zeros(size(CanuteCombined.MetaData.fo));
 
 % Compute mean and std dev per frequency
 for freqIdx = 1:length(CanuteCombined.MetaData.fo)
-    dayMask = (last4DaysZT >= 0) & (last4DaysZT <= 11);
+    dayMask = (last4DaysZT.Hour >= 0) & (last4DaysZT.Hour <= 11);
     dayData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(dayMask), 'UniformOutput', false));
     mean_day(freqIdx) = mean(dayData, 'omitnan');
     std_day(freqIdx) = std(dayData, 'omitnan');
     
-    nightMask = (last4DaysZT >= 12) & (last4DaysZT <= 23);
+    nightMask = (last4DaysZT.Hour >= 12) & (last4DaysZT.Hour <= 23);
     nightData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(nightMask), 'UniformOutput', false));
     mean_night(freqIdx) = mean(nightData, 'omitnan');
     std_night(freqIdx) = std(nightData, 'omitnan');
@@ -141,7 +141,7 @@ for cond = 1:length(conditions)
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
-        isDay = (cond_data.ZT_time(idx) >= 0 && cond_data.ZT_time(idx) <= 11);
+        isDay = (cond_data.ZT_Datetime(idx).Hour >= 0 && cond_data.ZT_Datetime(idx).Hour <= 11);
         mean_usage = isDay * mean_day + ~isDay * mean_night;
         std_usage = isDay * std_day + ~isDay * std_night;
         
@@ -156,25 +156,6 @@ end
 save('CanuteCombinedDataOutliersRemoved.mat', 'CanuteCombined', '-v7.3');
 
 %% functions
-function ZTHour = calculateZT(timestamp)
-    baseHour = 5; % Default start for ZT 0 is 5 AM
-    
-    if isDST(timestamp)
-        baseHour = 6; % Adjust for DST
-    end
-    
-    % Calculate the hour of the day since base hour and adjust to ZT hour
-    hourOfDay = hour(timestamp);
-    minuteOfDay = minute(timestamp) / 60;
-    
-    elapsedHours = hourOfDay + minuteOfDay - baseHour;
-    if elapsedHours < 0
-        elapsedHours = elapsedHours + 24; % Wrap around midnight
-    end
-    
-    ZTHour = floor(elapsedHours);
-end
-
 function isDst = isDST(timestamp)
     % DST starts on the second Sunday in March and ends on the first Sunday in November
     startDST = datetime(timestamp.Year, 3, 8) + days(7 - weekday(datetime(timestamp.Year, 3, 8), 'dayofweek'));
@@ -183,25 +164,6 @@ function isDst = isDST(timestamp)
 end
 
 function [appropriateTimestamps, ZTData] = getDataFromMatFile(fullFilePath)
-    % Extract the folder name from the full file path
-    [folderPath, ~, ~] = fileparts(fullFilePath);
-
-    % Extract the base folder name
-    [~, folderName] = fileparts(folderPath);
-
-    % Extract the animal name and initial timestamp from the folder name
-    tokens = regexp(folderName, '_(\d{6})_(\d{6})$', 'tokens');
-    if isempty(tokens)
-        error('The folder name does not match the expected format Animal_YYMMDD_HHMMSS');
-    end
-    dateStr = tokens{1}{1};
-    timeStr = tokens{1}{2};
-
-    % Combine date and time strings to create a datetime object
-    startDateStr = ['20' dateStr]; % Assuming the date is in the format YYMMDD
-    startTimeStr = timeStr;
-    startDatetime = datetime([startDateStr, startTimeStr], 'InputFormat', 'yyyyMMddHHmmss');
-
     % Load the .mat file
     data = load(fullFilePath);
     sleepStatesStruct = data.SleepState;
@@ -214,19 +176,38 @@ function [appropriateTimestamps, ZTData] = getDataFromMatFile(fullFilePath)
         error('The .mat file does not have the expected structure with idx.timestamps and idx.states');
     end
 
-    % Generate appropriate timestamps by adding 'timestamps' to 'startDatetime'
+    % Extract the folder name from the full file path
+    [folderPath, ~, ~] = fileparts(fullFilePath);
+    [~, folderName] = fileparts(folderPath);
+
+    % Extract the date and time from the folder name
+    tokens = regexp(folderName, '_(\d{6})_(\d{6})$', 'tokens');
+    if isempty(tokens)
+        error('The folder name does not match the expected format Animal_YYMMDD_HHMMSS');
+    end
+    dateStr = tokens{1}{1};
+    timeStr = tokens{1}{2};
+
+    % Combine date and time strings to create a datetime object
+    startDateStr = ['20' dateStr]; % Assuming the date is in the format YYMMDD
+    startTimeStr = timeStr;
+    startDatetime = datetime([startDateStr, startTimeStr], 'InputFormat', 'yyyyMMddHHmmss');
+
+    % Calculate appropriate timestamps by adding 'timestamps' to 'startDatetime'
     appropriateTimestamps = startDatetime + seconds(timestamps);
 
-    % Create an empty table
-    ZTHours = zeros(length(timestamps), 1);
-    sleepStatesColumn = sleepStates;
+    % Calculate ZTDatetime by adjusting for DST
+    ZTDatetimes = appropriateTimestamps;
 
-    % Calculate ZT hours
-    for i = 1:length(timestamps)
-        ZTHours(i) = calculateZT(appropriateTimestamps(i));
+    for i = 1:length(ZTDatetimes)
+        if isDST(appropriateTimestamps(i))
+            ZTDatetimes(i) = appropriateTimestamps(i) - hours(6);
+        else
+            ZTDatetimes(i) = appropriateTimestamps(i) - hours(5);
+        end
     end
 
     % Combine the data into a table
-    ZTData = table(appropriateTimestamps, ZTHours, sleepStatesColumn, ...
-                   'VariableNames', {'Timestamp', 'ZT_Hour', 'Sleep_State'});
+    ZTData = table(appropriateTimestamps, ZTDatetimes, sleepStates, ...
+                   'VariableNames', {'Timestamp', 'ZT_Datetime', 'Sleep_State'});
 end

@@ -1,13 +1,13 @@
 % Load data (uncomment and adjust as needed)
-%load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/CanuteCombinedDataOutliersRemoved.mat');
+%load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/HaraldCombinedDataOutliersRemoved.mat');
+saveDir = '/Users/noahmuscat/Desktop';
 
-% Define the editable frequency range
 minFreq = 0;
 maxFreq = 50;
 frequencyRange = [minFreq, maxFreq];
 
-% Get the frequency values from MetaData within the specified range
-fo = CanuteCombined.MetaData.fo;
+% Get the frequency valuTes from MetaData within the specified range
+fo = HaraldCombined.MetaData.fo;
 validFreqIdx = (fo >= frequencyRange(1) & fo <= frequencyRange(2)) & ...
                ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
@@ -21,7 +21,7 @@ spectrogramData = cell(length(conditions), 1);
 
 % Iterate over each condition
 for conditionIdx = 1:length(conditions)
-    condition = CanuteCombined.(conditions{conditionIdx});
+    condition = HaraldCombined.(conditions{conditionIdx});
     ztDatetime = condition.ZT_Datetime;
     zscoredFrequencyPower = condition.ZscoredFrequencyPower;
 
@@ -59,12 +59,13 @@ end
 for conditionIdx = 1:length(conditions)
     figure;
     imagesc(uniqueHours, frequencies, spectrogramData{conditionIdx}');
-    clim([-0.2 0.2]); % Apply consistent color scale
+    clim([-0.5 0.5]); % Apply consistent color scale
     colorbar
     axis xy;
     xlabel('ZT Hour');
     ylabel('Frequency (Hz)');
     title(['Z-scored Frequency Power per ZT Hour - ', conditionLabels{conditionIdx}]);
     set(gca, 'XTick', 0:1:23, 'XTickLabel', 0:1:23);
+    saveas(gcf, fullfile(saveDir, sprintf('HaraldSpectrogram_%s.png', conditionLabels{conditionIdx})));
 
 end

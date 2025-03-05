@@ -1,5 +1,5 @@
 % Load the .mat file
-% load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/HaraldCombinedDataOutliersRemoved.mat');
+%load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/CanuteCombinedDataOutliersRemoved.mat');
 saveDir = '/Users/noahmuscat/Desktop';
 
 % Define sleep state values and labels
@@ -90,5 +90,5 @@ for s = 1:length(sleepStates)
     
     sgtitle(sprintf('%s - Frequency Power', sleepStates{s}));
     fullPath = fullfile(saveDir, sprintf('%s_HaraldFrequencyPower.png', sleepStates{s}));
-    %saveas(gcf, fullPath);
+    saveas(gcf, fullPath);
 end

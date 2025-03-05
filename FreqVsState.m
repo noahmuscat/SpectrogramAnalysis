@@ -12,7 +12,7 @@ conditionTitles = {'300 Lux', '1000 Lux Week 1', '1000 Lux Week 4'};
 colors = {'b', 'g', 'r'}; % Blue, Green, Red for the different conditions
 
 % Get frequency indices excluding 55-65 Hz and 115-125 Hz
-fo = HaraldCombined.MetaData.fo;
+fo = CanuteCombined.MetaData.fo;
 %freqIndices = ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 freqIndices = fo <= 50; 
 
@@ -31,13 +31,13 @@ for s = 1:length(sleepStates)
             end
             
             % Identify respective indices
-            idx = HaraldCombined.(condition).ZT_Datetime.Hour >= hourRange(1) & ...
-                  HaraldCombined.(condition).ZT_Datetime.Hour < hourRange(2) & ...
-                  HaraldCombined.(condition).SleepState == stateValues(s);
+            idx = CanuteCombined.(condition).ZT_Datetime.Hour >= hourRange(1) & ...
+                  CanuteCombined.(condition).ZT_Datetime.Hour < hourRange(2) & ...
+                  CanuteCombined.(condition).SleepState == stateValues(s);
 
             if any(idx)
                 % Gather power data and compute mean
-                powerData = cat(2, HaraldCombined.(condition).FrequencyPower{idx});
+                powerData = cat(2, CanuteCombined.(condition).ZscoredFrequencyPower{idx});
                 meanPower = mean(powerData, 2, 'omitnan');
                 
                 % Update global min and max
@@ -52,7 +52,7 @@ end
 
 % Plot each sleep state
 for s = 1:length(sleepStates)
-    figure('Name', sprintf('%s - Frequency Power', sleepStates{s}), 'NumberTitle', 'off');
+    figure('Name', sprintf('%s - Z Scored Frequency Power', sleepStates{s}), 'NumberTitle', 'off');
     
     for timePeriod = 1:2
         timeTitle = 'Day';
@@ -67,18 +67,18 @@ for s = 1:length(sleepStates)
             condition = conditions{c};
             color = colors{c};
             
-            idx = HaraldCombined.(condition).ZT_Datetime.Hour >= hourRange(1) & ...
-                  HaraldCombined.(condition).ZT_Datetime.Hour < hourRange(2) & ...
-                  HaraldCombined.(condition).SleepState == stateValues(s);
+            idx = CanuteCombined.(condition).ZT_Datetime.Hour >= hourRange(1) & ...
+                  CanuteCombined.(condition).ZT_Datetime.Hour < hourRange(2) & ...
+                  CanuteCombined.(condition).SleepState == stateValues(s);
 
             if any(idx)
-                powerData = cat(2, HaraldCombined.(condition).FrequencyPower{idx});
+                powerData = cat(2, CanuteCombined.(condition).ZscoredFrequencyPower{idx});
                 meanPower = mean(powerData, 2, 'omitnan');
                 
                 subplot(1, 2, timePeriod);
                 hold on;
                 plot(fo(freqIndices), meanPower(freqIndices), 'Color', color, 'DisplayName', conditionTitles{c});
-                xlabel('Frequency (Hz)');
+                xlabel('Z-Scored Frequency (Hz)');
                 ylabel('Power');
                 title(sprintf('%s - %s', sleepStates{s}, timeTitle));
                 ylim([globalMin, globalMax]);  % Set consistent y-axis limits
@@ -88,7 +88,7 @@ for s = 1:length(sleepStates)
         legend('show', 'Location', 'northeast');
     end
     
-    sgtitle(sprintf('%s - Frequency Power', sleepStates{s}));
-    fullPath = fullfile(saveDir, sprintf('%s_HaraldFrequencyPower.png', sleepStates{s}));
+    sgtitle(sprintf('%s - Z Scored Frequency Power', sleepStates{s}));
+    fullPath = fullfile(saveDir, sprintf('%s_CanuteZScoreFrequencyPower.png', sleepStates{s}));
     saveas(gcf, fullPath);
 end

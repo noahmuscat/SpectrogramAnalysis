@@ -108,42 +108,32 @@ last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
 last4DaysZT = data300Lux.ZT_Datetime(last4DaysMask);
 last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
 
-% Mean and STD holders
-mean_day = zeros(size(CanuteCombined.MetaData.fo));
-std_day = zeros(size(CanuteCombined.MetaData.fo));
-mean_night = zeros(size(CanuteCombined.MetaData.fo));
-std_night = zeros(size(CanuteCombined.MetaData.fo));
+% Initialize mean and std holders for each frequency and ZT hour
+numFrequencies = length(CanuteCombined.MetaData.fo);
+mean_ZT = zeros(numFrequencies, 24);
+std_ZT = zeros(numFrequencies, 24);
 
-% Compute mean and std dev per frequency
-for freqIdx = 1:length(CanuteCombined.MetaData.fo)
-    dayMask = (last4DaysZT.Hour >= 0) & (last4DaysZT.Hour <= 11);
-    dayData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(dayMask), 'UniformOutput', false));
-    mean_day(freqIdx) = mean(dayData, 'omitnan');
-    std_day(freqIdx) = std(dayData, 'omitnan');
-    
-    nightMask = (last4DaysZT.Hour >= 12) & (last4DaysZT.Hour <= 23);
-    nightData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(nightMask), 'UniformOutput', false));
-    mean_night(freqIdx) = mean(nightData, 'omitnan');
-    std_night(freqIdx) = std(nightData, 'omitnan');
-end
-
-% Define normalization function with outlier removal
-function z_power = zscore_with_outlier_removal(power, mean_val, std_val, numStdDevs)
-    z_power = (power - mean_val) ./ std_val;
-    outlier_mask = abs(z_power) <= numStdDevs;
-    z_power(~outlier_mask) = NaN;  % Remove outliers by setting them to NaN
+% Compute mean and std dev per frequency per ZT hour
+for freqIdx = 1:numFrequencies
+    for ztHour = 0:23
+        hourMask = last4DaysZT.Hour == ztHour;
+        hourData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(hourMask), 'UniformOutput', false));
+        mean_ZT(freqIdx, ztHour + 1) = mean(hourData, 'omitnan');
+        std_ZT(freqIdx, ztHour + 1) = std(hourData, 'omitnan');
+    end
 end
 
 % Normalize each condition
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
+
 for cond = 1:length(conditions)
     cond_data = CanuteCombined.(conditions{cond});
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
-        isDay = (cond_data.ZT_Datetime(idx).Hour >= 0 && cond_data.ZT_Datetime(idx).Hour <= 11);
-        mean_usage = isDay * mean_day + ~isDay * mean_night;
-        std_usage = isDay * std_day + ~isDay * std_night;
+        ztHour = cond_data.ZT_Datetime(idx).Hour;
+        mean_usage = mean_ZT(:, ztHour + 1);
+        std_usage = std_ZT(:, ztHour + 1);
         
         powerArray = cond_data.FrequencyPower{idx};
         zscoreFreqPower{idx} = zscore_with_outlier_removal(powerArray, mean_usage, std_usage, numStdDevs);
@@ -153,7 +143,7 @@ for cond = 1:length(conditions)
 end
 
 %% Save Processed Data
-save('CanuteCombinedDataOutliersRemoved.mat', 'CanuteCombined', '-v7.3');
+save('CanuteCombinedDataV2.mat', 'CanuteCombined', '-v7.3');
 
 %% functions
 function isDst = isDST(timestamp)
@@ -210,4 +200,11 @@ function [appropriateTimestamps, ZTData] = getDataFromMatFile(fullFilePath)
     % Combine the data into a table
     ZTData = table(appropriateTimestamps, ZTDatetimes, sleepStates, ...
                    'VariableNames', {'Timestamp', 'ZT_Datetime', 'Sleep_State'});
+end
+
+% Define normalization function with outlier removal
+function z_power = zscore_with_outlier_removal(power, mean_val, std_val, numStdDevs)
+    z_power = (power - mean_val) ./ std_val;
+    outlier_mask = abs(z_power) <= numStdDevs;
+    z_power(~outlier_mask) = NaN;  % Remove outliers by setting them to NaN
 end

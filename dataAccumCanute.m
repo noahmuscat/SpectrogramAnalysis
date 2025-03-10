@@ -94,7 +94,7 @@ for i = 1:length(conditions)
 end
 
 %% Normalization
-numStdDevs = 4;  % Number of standard deviations for outlier detection
+numStdDevs = 2;  % Number of standard deviations for outlier detection
 luxField = 'Cond_300Lux';
 data300Lux = CanuteCombined.(luxField);
 

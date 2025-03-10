@@ -1,12 +1,9 @@
 saveDir = '/Users/noahmuscat/Desktop';
 
-minFreq = 0;
-maxFreq = 50;
-frequencyRange = [minFreq, maxFreq];
-
-% Get the frequency valuTes from MetaData within the specified range
+% Get the frequency values from MetaData within the specified range
 fo = HaraldCombined.MetaData.fo;
-validFreqIdx = (fo >= frequencyRange(1) & fo <= frequencyRange(2)) & ...
+%validFreqIdx = (fo >= 0 & fo < 40);
+validFreqIdx = fo >= 40 & fo < 200 & ...
                ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
 
@@ -57,13 +54,12 @@ end
 for conditionIdx = 1:length(conditions)
     figure;
     imagesc(uniqueHours, frequencies, spectrogramData{conditionIdx}');
-    clim([-0.5 0.5]); % Apply consistent color scale
     colorbar
     axis xy;
     xlabel('ZT Hour');
     ylabel('Frequency (Hz)');
     title(['Z-scored Frequency Power per ZT Hour - ', conditionLabels{conditionIdx}]);
     set(gca, 'XTick', 0:1:23, 'XTickLabel', 0:1:23);
-    %saveas(gcf, fullfile(saveDir, sprintf('HaraldSpectrogram_%s.png', conditionLabels{conditionIdx})));
+    saveas(gcf, fullfile(saveDir, sprintf('HaraldSpectrogramHighFreqs_%s.png', conditionLabels{conditionIdx})));
 
 end

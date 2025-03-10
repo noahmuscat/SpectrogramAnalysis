@@ -6,7 +6,7 @@ startStopFreqs = {[0.5 4], [5 10], [11 19], [20 30], [30 40], [40 60], [60 100],
 
 % Get the frequency values from MetaData and apply range exclusions
 fo = HaraldCombined.MetaData.fo;
-selectedFreqIdx = (fo >= 0.4069 & fo <= 180) & ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
+selectedFreqIdx = (fo >= 0.5 & fo <= 180) & ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 
 % Define the conditions and their labels
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};

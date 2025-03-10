@@ -1,5 +1,3 @@
-% Load data (uncomment and adjust as needed)
-%load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/HaraldCombinedDataOutliersRemoved.mat');
 saveDir = '/Users/noahmuscat/Desktop';
 
 minFreq = 0;
@@ -7,7 +5,7 @@ maxFreq = 50;
 frequencyRange = [minFreq, maxFreq];
 
 % Get the frequency valuTes from MetaData within the specified range
-fo = CanuteCombined.MetaData.fo;
+fo = HaraldCombined.MetaData.fo;
 validFreqIdx = (fo >= frequencyRange(1) & fo <= frequencyRange(2)) & ...
                ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
@@ -21,7 +19,7 @@ spectrogramData = cell(length(conditions), 1);
 
 % Iterate over each condition
 for conditionIdx = 1:length(conditions)
-    condition = CanuteCombined.(conditions{conditionIdx});
+    condition = HaraldCombined.(conditions{conditionIdx});
     ztDatetime = condition.ZT_Datetime;
     zscoredFrequencyPower = condition.ZscoredFrequencyPower;
 
@@ -66,6 +64,6 @@ for conditionIdx = 1:length(conditions)
     ylabel('Frequency (Hz)');
     title(['Z-scored Frequency Power per ZT Hour - ', conditionLabels{conditionIdx}]);
     set(gca, 'XTick', 0:1:23, 'XTickLabel', 0:1:23);
-    saveas(gcf, fullfile(saveDir, sprintf('CanuteSpectrogram_%s.png', conditionLabels{conditionIdx})));
+    %saveas(gcf, fullfile(saveDir, sprintf('HaraldSpectrogram_%s.png', conditionLabels{conditionIdx})));
 
 end

@@ -1,5 +1,3 @@
-% Load the .mat file
-%load('/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/CanuteCombinedDataOutliersRemoved.mat');
 saveDir = '/Users/noahmuscat/Desktop';
 
 % Define frequency bands and their corresponding names
@@ -7,8 +5,8 @@ bandNames = {'delta', 'theta', 'spindle', 'lowbeta', 'highbeta', 'lowgamma', 'mi
 startStopFreqs = {[0.5 4], [5 10], [11 19], [20 30], [30 40], [40 60], [60 100], [100 140], [140 180]};
 
 % Get the frequency values from MetaData and apply range exclusions
-fo = CanuteCombined.MetaData.fo;
-selectedFreqIdx = (fo >= 0.5 & fo <= 180) & ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
+fo = HaraldCombined.MetaData.fo;
+selectedFreqIdx = (fo >= 0.4069 & fo <= 180) & ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 
 % Define the conditions and their labels
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
@@ -28,7 +26,7 @@ for sleepStateIdx = 1:length(sleepStates)
     
     % Loop over each condition to create subplots
     for condIdx = 1:length(conditions)
-        condition = CanuteCombined.(conditions{condIdx});
+        condition = HaraldCombined.(conditions{condIdx});
 
         % Logical indexing for the current sleep state
         stateIndices = (condition.SleepState == state);
@@ -75,6 +73,5 @@ for sleepStateIdx = 1:length(sleepStates)
         grid on;
     end
 
-    % Optionally save the figure
-    saveas(gcf, fullfile(saveDir, sprintf('CanuteOscillatoryPower_%s.png', stateLabels{sleepStateIdx})));
+    %saveas(gcf, fullfile(saveDir, sprintf('HaraldOscillatoryPower_%s.png', stateLabels{sleepStateIdx})));
 end

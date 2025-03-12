@@ -94,7 +94,10 @@ for i = 1:length(conditions)
 end
 
 %% Normalization
-numStdDevs = 2;  % Number of standard deviations for outlier detection
+% Define sleep states
+sleepStates = [1, 3, 5]; % 1 = WAKE, 3 = NREM, 5 = REM
+
+% Use the last 4 days of data from the 300Lux condition as the normalization baseline
 luxField = 'Cond_300Lux';
 data300Lux = HaraldCombined.(luxField);
 
@@ -105,45 +108,73 @@ startTime = endTime - days(4);
 
 % Last 4 days' data
 last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
-last4DaysZT = data300Lux.ZT_Datetime(last4DaysMask);
+last4DaysSleepState = data300Lux.SleepState(last4DaysMask);
 last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
 
-% Initialize mean and std holders for each frequency and ZT hour
+% Initialize mean and std holders for each frequency and sleep state
 numFrequencies = length(HaraldCombined.MetaData.fo);
-mean_ZT = zeros(numFrequencies, 24);
-std_ZT = zeros(numFrequencies, 24);
+mean_sleepState = zeros(numFrequencies, length(sleepStates));
+std_sleepState = zeros(numFrequencies, length(sleepStates));
 
-% Compute mean and std dev per frequency per ZT hour
-for freqIdx = 1:numFrequencies
-    for ztHour = 0:23
-        hourMask = last4DaysZT.Hour == ztHour;
-        hourData = cell2mat(cellfun(@(x) x(freqIdx), last4DaysFrequencyPower(hourMask), 'UniformOutput', false));
-        mean_ZT(freqIdx, ztHour + 1) = mean(hourData, 'omitnan');
-        std_ZT(freqIdx, ztHour + 1) = std(hourData, 'omitnan');
+% Compute fractional power and the mean and std dev per frequency per sleep state
+fractionalPower_last4Days = cell(size(last4DaysFrequencyPower));
+
+for idx = 1:length(last4DaysFrequencyPower)
+    powerArray = last4DaysFrequencyPower{idx};
+    totalPower = sum(powerArray);
+    fractionalPower_last4Days{idx} = powerArray / totalPower; % Fractional power
+end
+
+for sleepStateIdx = 1:length(sleepStates)
+    currentState = sleepStates(sleepStateIdx);
+    currentMask = last4DaysSleepState == currentState;
+    currentFractionalPower = fractionalPower_last4Days(currentMask);
+
+    for freqIdx = 1:numFrequencies
+        freqData = cell2mat(cellfun(@(x) x(freqIdx), currentFractionalPower, 'UniformOutput', false));
+        mean_sleepState(freqIdx, sleepStateIdx) = mean(freqData, 'omitnan');
+        std_sleepState(freqIdx, sleepStateIdx) = std(freqData, 'omitnan');
     end
 end
 
-% Normalize each condition
+% Normalize each condition based on fractional power
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
 
-for cond = 1:length(conditions)
-    cond_data = HaraldCombined.(conditions{cond});
+for condIdx = 1:length(conditions)
+    cond = conditions{condIdx};
+    cond_data = HaraldCombined.(cond);
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
-        ztHour = cond_data.ZT_Datetime(idx).Hour;
-        mean_usage = mean_ZT(:, ztHour + 1);
-        std_usage = std_ZT(:, ztHour + 1);
-        
+        state = cond_data.SleepState(idx);
         powerArray = cond_data.FrequencyPower{idx};
-        zscoreFreqPower{idx} = zscore_with_outlier_removal(powerArray, mean_usage, std_usage, numStdDevs);
+        totalPower = sum(powerArray);
+        fractionalPower = powerArray / totalPower;
+
+        % Find the corresponding sleep state index
+        sleepStateIdx = find(sleepStates == state, 1);
+
+        % Safety check for unexpected sleep states
+        if isempty(sleepStateIdx)
+            warning('Unexpected sleep state encountered: %d', state);
+            zscoreFreqPower{idx} = NaN(numFrequencies, 1);
+            continue;
+        end
+        
+        mean_usage = mean_sleepState(:, sleepStateIdx);
+        std_usage = std_sleepState(:, sleepStateIdx);
+
+        % Compute Z-score
+        zscoreFreqPower{idx} = (fractionalPower - mean_usage) ./ std_usage;
+        outlier_mask = abs(zscoreFreqPower{idx}) <= 2;
+        zscoreFreqPower{idx}(~outlier_mask) = NaN;
     end
     
-    HaraldCombined.(conditions{cond}).ZscoredFrequencyPower = zscoreFreqPower;
+    HaraldCombined.(cond).ZscoredFrequencyPower = zscoreFreqPower;
 end
 
 %% Save Processed Data
-save('HaraldCombinedDataV2.mat', 'HaraldCombined', '-v7.3');
+save('HaraldCombinedNormalized.mat', 'HaraldCombined', '-v7.3');
 
 %% functions
 function isDst = isDST(timestamp)
@@ -200,11 +231,4 @@ function [appropriateTimestamps, ZTData] = getDataFromMatFile(fullFilePath)
     % Combine the data into a table
     ZTData = table(appropriateTimestamps, ZTDatetimes, sleepStates, ...
                    'VariableNames', {'Timestamp', 'ZT_Datetime', 'Sleep_State'});
-end
-
-% Define normalization function with outlier removal
-function z_power = zscore_with_outlier_removal(power, mean_val, std_val, numStdDevs)
-    z_power = (power - mean_val) ./ std_val;
-    outlier_mask = abs(z_power) <= numStdDevs;
-    z_power(~outlier_mask) = NaN;  % Remove outliers by setting them to NaN
 end

@@ -94,6 +94,22 @@ for i = 1:length(conditions)
 end
 
 %% Normalization
+% Exclude frequencies from analysis
+exclude_ranges = [55, 65; 115, 125];
+
+% Frequency values from metadata
+frequencies = CanuteCombined.MetaData.fo;
+
+% Create an exclusion mask
+exclude_mask = false(size(frequencies));
+for i = 1:size(exclude_ranges, 1)
+    exclude_mask = exclude_mask | (frequencies >= exclude_ranges(i, 1) & frequencies <= exclude_ranges(i, 2));
+end
+
+% Indices of frequencies to include
+include_indices = find(~exclude_mask);
+numIncludedFrequencies = length(include_indices);
+
 % Define sleep states
 sleepStates = [1, 3, 5]; % 1 = WAKE, 3 = NREM, 5 = REM
 
@@ -111,18 +127,18 @@ last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
 last4DaysSleepState = data300Lux.SleepState(last4DaysMask);
 last4DaysFrequencyPower = data300Lux.FrequencyPower(last4DaysMask);
 
-% Initialize mean and std holders for each frequency and sleep state
-numFrequencies = length(CanuteCombined.MetaData.fo);
-mean_sleepState = zeros(numFrequencies, length(sleepStates));
-std_sleepState = zeros(numFrequencies, length(sleepStates));
+% Initialize mean and std holders for included frequencies and sleep states
+mean_sleepState = zeros(numIncludedFrequencies, length(sleepStates));
+std_sleepState = zeros(numIncludedFrequencies, length(sleepStates));
 
 % Compute fractional power and the mean and std dev per frequency per sleep state
 fractionalPower_last4Days = cell(size(last4DaysFrequencyPower));
 
 for idx = 1:length(last4DaysFrequencyPower)
     powerArray = last4DaysFrequencyPower{idx};
-    totalPower = sum(powerArray);
-    fractionalPower_last4Days{idx} = powerArray / totalPower; % Fractional power
+    filteredPowerArray = powerArray(include_indices); % Apply frequency filter
+    totalPower = sum(filteredPowerArray);
+    fractionalPower_last4Days{idx} = filteredPowerArray / totalPower; % Fractional power
 end
 
 for sleepStateIdx = 1:length(sleepStates)
@@ -130,7 +146,7 @@ for sleepStateIdx = 1:length(sleepStates)
     currentMask = last4DaysSleepState == currentState;
     currentFractionalPower = fractionalPower_last4Days(currentMask);
 
-    for freqIdx = 1:numFrequencies
+    for freqIdx = 1:numIncludedFrequencies
         freqData = cell2mat(cellfun(@(x) x(freqIdx), currentFractionalPower, 'UniformOutput', false));
         mean_sleepState(freqIdx, sleepStateIdx) = mean(freqData, 'omitnan');
         std_sleepState(freqIdx, sleepStateIdx) = std(freqData, 'omitnan');
@@ -148,8 +164,9 @@ for condIdx = 1:length(conditions)
     for idx = 1:length(cond_data.FrequencyPower)
         state = cond_data.SleepState(idx);
         powerArray = cond_data.FrequencyPower{idx};
-        totalPower = sum(powerArray);
-        fractionalPower = powerArray / totalPower;
+        filteredPowerArray = powerArray(include_indices); % Apply frequency filter
+        totalPower = sum(filteredPowerArray);
+        fractionalPower = filteredPowerArray / totalPower;
 
         % Find the corresponding sleep state index
         sleepStateIdx = find(sleepStates == state, 1);
@@ -157,7 +174,7 @@ for condIdx = 1:length(conditions)
         % Safety check for unexpected sleep states
         if isempty(sleepStateIdx)
             warning('Unexpected sleep state encountered: %d', state);
-            zscoreFreqPower{idx} = NaN(numFrequencies, 1);
+            zscoreFreqPower{idx} = NaN(numIncludedFrequencies, 1);
             continue;
         end
         

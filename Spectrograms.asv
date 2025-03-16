@@ -1,6 +1,6 @@
 saveDir = '/Users/noahmuscat/Desktop';
 
-dataStruct = CanuteCombined112;
+dataStruct = HaraldCombined120;
 
 % Get frequency values from MetaData within the specified range
 fo = dataStruct.MetaData.fo;
@@ -133,5 +133,5 @@ for stateIdx = 1:length(sleepStates)
     
     sgtitle(['Z-scored Frequency Power - ', sleepStateLabels{stateIdx}]);
 
-    saveas(gcf, fullfile(saveDir, sprintf('CanuteCh112SpectrogramLowFreqs_%s.png', sleepStateLabels{stateIdx})));
+    saveas(gcf, fullfile(saveDir, sprintf('HaraldCh120SpectrogramHighFreqs_%s.png', sleepStateLabels{stateIdx})));
 end

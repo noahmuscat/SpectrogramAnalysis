@@ -4,11 +4,11 @@ baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysA
             '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/1000LuxWk4'};
 
 % Initialize the main structure
-CanuteCombined = struct();
-CanuteCombined.MetaData = struct();
-CanuteCombined.MetaData.Ch = 80; % Channel of interest
-CanuteCombined.MetaData.Rat = 'Canute';
-CanuteCombined.MetaData.fo = []; % Initialize MetaData.fo as an empty array
+CanuteCombined112 = struct();
+CanuteCombined112.MetaData = struct();
+CanuteCombined112.MetaData.Ch = 112; % Channel of interest
+CanuteCombined112.MetaData.Rat = 'Canute';
+CanuteCombined112.MetaData.fo = []; % Initialize MetaData.fo as an empty array
 
 % Define each condition's data structure
 conditions = {'300Lux', '1000LuxWk1', '1000LuxWk4'};
@@ -18,11 +18,11 @@ for i = 1:length(conditions)
     validCondition = validConditions{i};
     
     % Initialize fields for each condition
-    CanuteCombined.(validCondition) = struct();
-    CanuteCombined.(validCondition).Datetime = datetime.empty();
-    CanuteCombined.(validCondition).ZT_Datetime = [];
-    CanuteCombined.(validCondition).SleepState = [];
-    CanuteCombined.(validCondition).FrequencyPower = {}; % Cell array for power spectra
+    CanuteCombined112.(validCondition) = struct();
+    CanuteCombined112.(validCondition).Datetime = datetime.empty();
+    CanuteCombined112.(validCondition).ZT_Datetime = [];
+    CanuteCombined112.(validCondition).SleepState = [];
+    CanuteCombined112.(validCondition).FrequencyPower = {}; % Cell array for power spectra
 
     % List all subdirectories for each condition
     dayDirs = dir(baseDirs{i});
@@ -50,9 +50,9 @@ for i = 1:length(conditions)
             [appropriateTimestamps, ZTData] = getDataFromMatFile(sleepFile);
             
             % Append to pooled data
-            CanuteCombined.(validCondition).Datetime = [CanuteCombined.(validCondition).Datetime; appropriateTimestamps];
-            CanuteCombined.(validCondition).ZT_Datetime = [CanuteCombined.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
-            CanuteCombined.(validCondition).SleepState = [CanuteCombined.(validCondition).SleepState; ZTData.Sleep_State];
+            CanuteCombined112.(validCondition).Datetime = [CanuteCombined112.(validCondition).Datetime; appropriateTimestamps];
+            CanuteCombined112.(validCondition).ZT_Datetime = [CanuteCombined112.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
+            CanuteCombined112.(validCondition).SleepState = [CanuteCombined112.(validCondition).SleepState; ZTData.Sleep_State];
         else
             warning("SleepState file not found: %s", sleepFile);
         end
@@ -61,7 +61,7 @@ for i = 1:length(conditions)
         eegFile = fullfile(dayDir, strcat(folderName(1:end-7), '.eegstates.mat'));
         if exist(eegFile, 'file')
             eegData = load(eegFile);
-            chIdx = find(eegData.StateInfo.Chs == 80, 1); % Find index of channel 80
+            chIdx = find(eegData.StateInfo.Chs == 112, 1); % Find index of channel 112
             
             if ~isempty(chIdx)
                 % Retrieve spectrogram data
@@ -69,17 +69,17 @@ for i = 1:length(conditions)
                 fo = eegData.StateInfo.fspec{1, chIdx}.fo; % Fx1
 
                 % Ensure MetaData has frequencies
-                if isempty(CanuteCombined.MetaData.fo)
-                    CanuteCombined.MetaData.fo = fo; % Save frequencies once
+                if isempty(CanuteCombined112.MetaData.fo)
+                    CanuteCombined112.MetaData.fo = fo; % Save frequencies once
                 end
 
                 % Append power data only if timestamps and states are valid
                 numRecords = numel(appropriateTimestamps);
                 for t = 1:min(size(spec, 1), numRecords) % Choose the minimum
-                    CanuteCombined.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
+                    CanuteCombined112.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
                 end
             else
-                warning("Channel 80 not found in EEG data for folder: %s", folderName);
+                warning("Channel 112 not found in EEG data for folder: %s", folderName);
             end
         else
             warning("EEG file not found: %s", eegFile);
@@ -87,9 +87,9 @@ for i = 1:length(conditions)
     end
     
     % Ensure consistency across all data fields
-    numEntries = length(CanuteCombined.(validCondition).Datetime);
-    if length(CanuteCombined.(validCondition).FrequencyPower) > numEntries
-        CanuteCombined.(validCondition).FrequencyPower = CanuteCombined.(validCondition).FrequencyPower(1:numEntries);
+    numEntries = length(CanuteCombined112.(validCondition).Datetime);
+    if length(CanuteCombined112.(validCondition).FrequencyPower) > numEntries
+        CanuteCombined112.(validCondition).FrequencyPower = CanuteCombined112.(validCondition).FrequencyPower(1:numEntries);
     end
 end
 
@@ -98,7 +98,7 @@ end
 exclude_ranges = [55, 65; 115, 125];
 
 % Frequency values from metadata
-frequencies = CanuteCombined.MetaData.fo;
+frequencies = CanuteCombined112.MetaData.fo;
 
 % Create an exclusion mask
 exclude_mask = false(size(frequencies));
@@ -114,7 +114,7 @@ sleepStates = [1, 3, 5]; % 1 = WAKE, 3 = NREM, 5 = REM
 
 % Use the last 4 days of data from the 300Lux condition as the normalization baseline
 luxField = 'Cond_300Lux';
-data300Lux = CanuteCombined.(luxField);
+data300Lux = CanuteCombined112.(luxField);
 
 % Calculate timeframe
 datetime_list = data300Lux.Datetime;
@@ -158,7 +158,7 @@ conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
 
 for condIdx = 1:length(conditions)
     cond = conditions{condIdx};
-    cond_data = CanuteCombined.(cond);
+    cond_data = CanuteCombined112.(cond);
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
@@ -187,11 +187,11 @@ for condIdx = 1:length(conditions)
         zscoreFreqPower{idx}(~outlier_mask) = NaN;
     end
     
-    CanuteCombined.(cond).ZscoredFrequencyPower = zscoreFreqPower;
+    CanuteCombined112.(cond).ZscoredFrequencyPower = zscoreFreqPower;
 end
 
 %% Save Processed Data
-save('CanuteCombinedNormalized.mat', 'CanuteCombined', '-v7.3');
+save('CanuteCombinedNormalizedCh112.mat', 'CanuteCombined112', '-v7.3');
 
 %% functions
 function isDst = isDST(timestamp)

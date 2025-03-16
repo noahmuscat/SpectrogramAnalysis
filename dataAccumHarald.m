@@ -4,11 +4,11 @@ baseDirs = {'/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysA
             '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/1000LuxWk4'};
 
 % Initialize the main structure
-HaraldCombined = struct();
-HaraldCombined.MetaData = struct();
-HaraldCombined.MetaData.Ch = 80; % Channel of interest
-HaraldCombined.MetaData.Rat = 'Harald';
-HaraldCombined.MetaData.fo = []; % Initialize MetaData.fo as an empty array
+HaraldCombined120 = struct();
+HaraldCombined120.MetaData = struct();
+HaraldCombined120.MetaData.Ch = 120; % Channel of interest
+HaraldCombined120.MetaData.Rat = 'Harald';
+HaraldCombined120.MetaData.fo = []; % Initialize MetaData.fo as an empty array
 
 % Define each condition's data structure
 conditions = {'300Lux', '1000LuxWk1', '1000LuxWk4'};
@@ -18,11 +18,11 @@ for i = 1:length(conditions)
     validCondition = validConditions{i};
     
     % Initialize fields for each condition
-    HaraldCombined.(validCondition) = struct();
-    HaraldCombined.(validCondition).Datetime = datetime.empty();
-    HaraldCombined.(validCondition).ZT_Datetime = [];
-    HaraldCombined.(validCondition).SleepState = [];
-    HaraldCombined.(validCondition).FrequencyPower = {}; % Cell array for power spectra
+    HaraldCombined120.(validCondition) = struct();
+    HaraldCombined120.(validCondition).Datetime = datetime.empty();
+    HaraldCombined120.(validCondition).ZT_Datetime = [];
+    HaraldCombined120.(validCondition).SleepState = [];
+    HaraldCombined120.(validCondition).FrequencyPower = {}; % Cell array for power spectra
 
     % List all subdirectories for each condition
     dayDirs = dir(baseDirs{i});
@@ -50,9 +50,9 @@ for i = 1:length(conditions)
             [appropriateTimestamps, ZTData] = getDataFromMatFile(sleepFile);
             
             % Append to pooled data
-            HaraldCombined.(validCondition).Datetime = [HaraldCombined.(validCondition).Datetime; appropriateTimestamps];
-            HaraldCombined.(validCondition).ZT_Datetime = [HaraldCombined.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
-            HaraldCombined.(validCondition).SleepState = [HaraldCombined.(validCondition).SleepState; ZTData.Sleep_State];
+            HaraldCombined120.(validCondition).Datetime = [HaraldCombined120.(validCondition).Datetime; appropriateTimestamps];
+            HaraldCombined120.(validCondition).ZT_Datetime = [HaraldCombined120.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
+            HaraldCombined120.(validCondition).SleepState = [HaraldCombined120.(validCondition).SleepState; ZTData.Sleep_State];
         else
             warning("SleepState file not found: %s", sleepFile);
         end
@@ -61,7 +61,7 @@ for i = 1:length(conditions)
         eegFile = fullfile(dayDir, strcat(folderName(1:end-7), '.eegstates.mat'));
         if exist(eegFile, 'file')
             eegData = load(eegFile);
-            chIdx = find(eegData.StateInfo.Chs == 80, 1); % Find index of channel 80
+            chIdx = find(eegData.StateInfo.Chs == 120, 1); % Find index of channel 120
             
             if ~isempty(chIdx)
                 % Retrieve spectrogram data
@@ -69,17 +69,17 @@ for i = 1:length(conditions)
                 fo = eegData.StateInfo.fspec{1, chIdx}.fo; % Fx1
 
                 % Ensure MetaData has frequencies
-                if isempty(HaraldCombined.MetaData.fo)
-                    HaraldCombined.MetaData.fo = fo; % Save frequencies once
+                if isempty(HaraldCombined120.MetaData.fo)
+                    HaraldCombined120.MetaData.fo = fo; % Save frequencies once
                 end
 
                 % Append power data only if timestamps and states are valid
                 numRecords = numel(appropriateTimestamps);
                 for t = 1:min(size(spec, 1), numRecords) % Choose the minimum
-                    HaraldCombined.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
+                    HaraldCombined120.(validCondition).FrequencyPower{end+1, 1} = spec(t, :)';
                 end
             else
-                warning("Channel 80 not found in EEG data for folder: %s", folderName);
+                warning("Channel 120 not found in EEG data for folder: %s", folderName);
             end
         else
             warning("EEG file not found: %s", eegFile);
@@ -87,9 +87,9 @@ for i = 1:length(conditions)
     end
     
     % Ensure consistency across all data fields
-    numEntries = length(HaraldCombined.(validCondition).Datetime);
-    if length(HaraldCombined.(validCondition).FrequencyPower) > numEntries
-        HaraldCombined.(validCondition).FrequencyPower = HaraldCombined.(validCondition).FrequencyPower(1:numEntries);
+    numEntries = length(HaraldCombined120.(validCondition).Datetime);
+    if length(HaraldCombined120.(validCondition).FrequencyPower) > numEntries
+        HaraldCombined120.(validCondition).FrequencyPower = HaraldCombined120.(validCondition).FrequencyPower(1:numEntries);
     end
 end
 
@@ -98,7 +98,7 @@ end
 exclude_ranges = [55, 65; 115, 125];
 
 % Frequency values from metadata
-frequencies = HaraldCombined.MetaData.fo;
+frequencies = HaraldCombined120.MetaData.fo;
 
 % Create an exclusion mask
 exclude_mask = false(size(frequencies));
@@ -114,7 +114,7 @@ sleepStates = [1, 3, 5]; % 1 = WAKE, 3 = NREM, 5 = REM
 
 % Use the last 4 days of data from the 300Lux condition as the normalization baseline
 luxField = 'Cond_300Lux';
-data300Lux = HaraldCombined.(luxField);
+data300Lux = HaraldCombined120.(luxField);
 
 % Calculate timeframe
 datetime_list = data300Lux.Datetime;
@@ -158,7 +158,7 @@ conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
 
 for condIdx = 1:length(conditions)
     cond = conditions{condIdx};
-    cond_data = HaraldCombined.(cond);
+    cond_data = HaraldCombined120.(cond);
     zscoreFreqPower = cell(size(cond_data.FrequencyPower));
     
     for idx = 1:length(cond_data.FrequencyPower)
@@ -187,11 +187,11 @@ for condIdx = 1:length(conditions)
         zscoreFreqPower{idx}(~outlier_mask) = NaN;
     end
     
-    HaraldCombined.(cond).ZscoredFrequencyPower = zscoreFreqPower;
+    HaraldCombined120.(cond).ZscoredFrequencyPower = zscoreFreqPower;
 end
 
 %% Save Processed Data
-save('HaraldCombinedNormalized.mat', 'HaraldCombined', '-v7.3');
+save('HaraldCombinedNormalizedCh120.mat', 'HaraldCombined120', '-v7.3');
 
 %% functions
 function isDst = isDST(timestamp)

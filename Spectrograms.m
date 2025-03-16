@@ -1,8 +1,10 @@
 saveDir = '/Users/noahmuscat/Desktop';
 
 % Get frequency values from MetaData within the specified range
-fo = CanuteCombined.MetaData.fo;
-validFreqIdx = (fo >= 0 & fo < 40);  % Valid frequencies range
+fo = HaraldCombined.MetaData.fo;
+validFreqIdx = (fo >= 0 & fo < 40);
+%validFreqIdx = fo >= 40 & fo < 200 & ...
+%               ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
 
 % Specify conditions and labels for plotting
@@ -27,7 +29,7 @@ for stateIdx = 1:length(sleepStates)
     currentState = sleepStates(stateIdx);
     
     for conditionIdx = 1:length(conditions)
-        condition = CanuteCombined.(conditions{conditionIdx});
+        condition = HaraldCombined.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
         zscoredFrequencyPower = condition.ZscoredFrequencyPower;
@@ -80,7 +82,7 @@ for stateIdx = 1:length(sleepStates)
     
     % Iterate over each condition to fill subplots
     for conditionIdx = 1:length(conditions)
-        condition = CanuteCombined.(conditions{conditionIdx});
+        condition = HaraldCombined.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
         zscoredFrequencyPower = condition.ZscoredFrequencyPower;
@@ -127,9 +129,7 @@ for stateIdx = 1:length(sleepStates)
         set(gca, 'XTick', 0:1:23);
     end
     
-    % Add a super title to the figure for the sleep state
     sgtitle(['Z-scored Frequency Power - ', sleepStateLabels{stateIdx}]);
 
-    % Uncomment to save figure
-    % saveas(gcf, fullfile(saveDir, sprintf('CanuteSpectrogram_%s.png', sleepStateLabels{stateIdx})));
+    saveas(gcf, fullfile(saveDir, sprintf('HaraldSpectrogramLowFreqs_%s.png', sleepStateLabels{stateIdx})));
 end

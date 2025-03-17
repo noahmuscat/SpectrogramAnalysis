@@ -1,6 +1,6 @@
 saveDir = '/Users/noahmuscat/Desktop';
 
-dataStruct = HaraldCombined120;
+dataStruct = HaraldV2Combined80;
 
 % Get frequency values from MetaData within the specified range
 fo = dataStruct.MetaData.fo;
@@ -34,7 +34,7 @@ for stateIdx = 1:length(sleepStates)
         condition = dataStruct.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
-        zscoredFrequencyPower = condition.ZscoredFrequencyPower;
+        zscoredFrequencyPower = condition.ZScoreFractionalPower;
 
         % Convert the ZT datetime to ZT hours
         ztHours = hour(ztDatetime);
@@ -87,7 +87,7 @@ for stateIdx = 1:length(sleepStates)
         condition = dataStruct.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
-        zscoredFrequencyPower = condition.ZscoredFrequencyPower;
+        zscoredFrequencyPower = condition.ZScoreFractionalPower;
 
         % Convert the ZT datetime to ZT hours
         ztHours = hour(ztDatetime);
@@ -133,5 +133,5 @@ for stateIdx = 1:length(sleepStates)
     
     sgtitle(['Z-scored Frequency Power - ', sleepStateLabels{stateIdx}]);
 
-    saveas(gcf, fullfile(saveDir, sprintf('HaraldCh120SpectrogramHighFreqs_%s.png', sleepStateLabels{stateIdx})));
+    %saveas(gcf, fullfile(saveDir, sprintf('CanuteV2Ch80SpectrogramLowFreqs_%s.png', sleepStateLabels{stateIdx})));
 end

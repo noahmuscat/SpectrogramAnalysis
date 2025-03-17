@@ -1,12 +1,9 @@
 saveDir = '/Users/noahmuscat/Desktop';
-
-dataStruct = CanuteCombined112;
+dataStruct = HaraldV2Combined80;
 
 % Get frequency values from MetaData within the specified range
 fo = dataStruct.MetaData.fo;
 validFreqIdx = (fo >= 0 & fo < 40);
-%validFreqIdx = fo >= 40 & fo < 200 & ...
-%               ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
 
 % Specify conditions and labels for plotting
@@ -17,121 +14,120 @@ conditionLabels = {'300 Lux', '1000 Lux Week 1', '1000 Lux Week 4'};
 sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
-% Iterate over each sleep state to compute global min and max for plotting
-globalMin = zeros(1, length(sleepStates));
-globalMax = zeros(1, length(sleepStates));
+% Define aggregation time interval (5 minutes)
+aggInterval = minutes(5);
 
-% Initialize global min and max with extremes
-globalMin(:) = Inf;
-globalMax(:) = -Inf;
+% Precompute global min and max
+globalMin = Inf;
+globalMax = -Inf;
 
+% First pass to determine global min and max across all data
 for stateIdx = 1:length(sleepStates)
-    avgZscoredPowerOverall = []; % Store all hourly averages for current sleep state
-    
     currentState = sleepStates(stateIdx);
-    
+
     for conditionIdx = 1:length(conditions)
         condition = dataStruct.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
-        zscoredFrequencyPower = condition.ZscoredFrequencyPower;
+        zscoredFrequencyPower = condition.ZScoreFractionalPower;
 
-        % Convert the ZT datetime to ZT hours
-        ztHours = hour(ztDatetime);
-        uniqueHours = 0:23;
+        % Logical indexing for current sleep state
+        stateIndices = sleepState == currentState;
 
-        % Initialize storage for average z-scored power per ZT hour for the current sleep state
-        avgZscoredPowerPerHour = zeros(length(uniqueHours), length(frequencies));
+        % Extract relevant z-scored power and corresponding times
+        currentTimes = ztDatetime(stateIndices);
+        zPowerState = zscoredFrequencyPower(stateIndices);
 
-        % Logical indexing for the current sleep state
-        stateIndices = (sleepState == currentState);
+        % Prepare array to hold accumulated power spectra
+        numPoints = numel(zPowerState);
+        powerAccum = zeros(numPoints, length(frequencies));
 
-        % Iterate over each ZT hour
-        for h = uniqueHours
-            % Logical indexing for the current ZT hour within the current sleep state
-            hourIndices = stateIndices & (ztHours == h);
+        for n = 1:numPoints
+            powerAccum(n, :) = zPowerState{n}(validFreqIdx)';
+        end
 
-            % Extract z-scored frequency power data for the current hour and sleep state
-            hourStateZscoredPower = zscoredFrequencyPower(hourIndices);
+        % Sort data
+        [sortedTimes, sortIdx] = sort(currentTimes);
+        sortedPower = powerAccum(sortIdx, :);
 
-            % Accumulate power data for averaging
-            if ~isempty(hourStateZscoredPower)
-                hourPowerAccum = zeros(length(hourStateZscoredPower), length(frequencies));
-                for n = 1:length(hourStateZscoredPower)
-                    freqPower = hourStateZscoredPower{n};
-                    % Apply the valid frequency index
-                    hourPowerAccum(n, :) = freqPower(validFreqIdx)';
-                end
-                avgZscoredPowerPerHour(h + 1, :) = mean(hourPowerAccum, 1, 'omitnan');
+        % Bin data
+        binEdges = min(sortedTimes):aggInterval:max(sortedTimes);
+        numBins = length(binEdges) - 1;
+        binnedPower = zeros(numBins, length(frequencies));
+
+        for b = 1:numBins
+            inBin = sortedTimes >= binEdges(b) & sortedTimes < binEdges(b+1);
+            if any(inBin)
+                binnedPower(b, :) = mean(sortedPower(inBin, :), 1, 'omitnan');
+            else
+                binnedPower(b, :) = NaN;
             end
         end
 
-        % Store the computed averages for global min/max calculation
-        avgZscoredPowerOverall = [avgZscoredPowerOverall; avgZscoredPowerPerHour];
+        % Update global min and max
+        globalMin = min(globalMin, min(binnedPower, [], 'all', 'omitnan'));
+        globalMax = max(globalMax, max(binnedPower, [], 'all', 'omitnan'));
     end
-    
-    % Calculate global min and max from the hourly binned averages
-    globalMin(stateIdx) = min(avgZscoredPowerOverall(:), [], 'omitnan');
-    globalMax(stateIdx) = max(avgZscoredPowerOverall(:), [], 'omitnan');
 end
 
-% Iterate over each sleep state to plot
+% Create plots using the determined global min/max for color scaling
 for stateIdx = 1:length(sleepStates)
     currentState = sleepStates(stateIdx);
-
-    % Create a new figure for the current sleep state
-    figure;
     
-    % Iterate over each condition to fill subplots
+    figure;
     for conditionIdx = 1:length(conditions)
         condition = dataStruct.(conditions{conditionIdx});
         ztDatetime = condition.ZT_Datetime;
         sleepState = condition.SleepState;
-        zscoredFrequencyPower = condition.ZscoredFrequencyPower;
+        zscoredFrequencyPower = condition.ZScoreFractionalPower;
+        
+        % Logical indexing for current sleep state
+        stateIndices = sleepState == currentState;
 
-        % Convert the ZT datetime to ZT hours
-        ztHours = hour(ztDatetime);
-        uniqueHours = 0:23;
+        % Extract relevant z-scored power and corresponding times
+        currentTimes = ztDatetime(stateIndices);
+        zPowerState = zscoredFrequencyPower(stateIndices);
 
-        % Initialize storage for average z-scored power per ZT hour for the current sleep state
-        avgZscoredPowerPerHour = zeros(length(uniqueHours), length(frequencies));
+        % Prepare array to hold accumulated power spectra
+        numPoints = numel(zPowerState);
+        powerAccum = zeros(numPoints, length(frequencies));
 
-        % Logical indexing for the current sleep state
-        stateIndices = (sleepState == currentState);
+        for n = 1:numPoints
+            powerAccum(n, :) = zPowerState{n}(validFreqIdx)';
+        end
 
-        % Iterate over each ZT hour
-        for h = uniqueHours
-            % Logical indexing for the current ZT hour within the current sleep state
-            hourIndices = stateIndices & (ztHours == h);
+        % Sort data
+        [sortedTimes, sortIdx] = sort(currentTimes);
+        sortedPower = powerAccum(sortIdx, :);
 
-            % Extract z-scored frequency power data for the current hour and sleep state
-            hourStateZscoredPower = zscoredFrequencyPower(hourIndices);
+        % Bin data
+        binEdges = min(sortedTimes):aggInterval:max(sortedTimes);
+        numBins = length(binEdges) - 1;
+        binnedPower = zeros(numBins, length(frequencies));
 
-            % Accumulate power data for averaging
-            if ~isempty(hourStateZscoredPower)
-                hourPowerAccum = zeros(length(hourStateZscoredPower), length(frequencies));
-                for n = 1:length(hourStateZscoredPower)
-                    freqPower = hourStateZscoredPower{n};
-                    % Apply the valid frequency index
-                    hourPowerAccum(n, :) = freqPower(validFreqIdx)';
-                end
-                avgZscoredPowerPerHour(h + 1, :) = mean(hourPowerAccum, 1, 'omitnan');
+        for b = 1:numBins
+            inBin = sortedTimes >= binEdges(b) & sortedTimes < binEdges(b+1);
+            if any(inBin)
+                binnedPower(b, :) = mean(sortedPower(inBin, :), 1, 'omitnan');
+            else
+                binnedPower(b, :) = NaN;
             end
         end
 
-        % Create a subplot for each condition
+        % Plot for the current condition
         subplot(1, length(conditions), conditionIdx);
-        imagesc(uniqueHours, frequencies, avgZscoredPowerPerHour');
+        imagesc(datetime(binEdges(1:end-1)), frequencies, binnedPower');
         colorbar;
-        clim([globalMin(stateIdx), globalMax(stateIdx)]); % Set the color axis for global min/max
+        colormap(jet);
+        clim([globalMin, globalMax]);
         axis xy;
-        xlabel('ZT Hour');
+        xlabel('Time');
         ylabel('Frequency (Hz)');
         title(conditionLabels{conditionIdx});
-        set(gca, 'XTick', 0:1:23);
     end
     
     sgtitle(['Z-scored Frequency Power - ', sleepStateLabels{stateIdx}]);
 
-    saveas(gcf, fullfile(saveDir, sprintf('CanuteCh112SpectrogramLowFreqs_%s.png', sleepStateLabels{stateIdx})));
+    % Save the plot for each sleep state
+    saveas(gcf, fullfile(saveDir, sprintf('CanuteV2Ch80Spectrogram_%s.png', sleepStateLabels{stateIdx})));
 end

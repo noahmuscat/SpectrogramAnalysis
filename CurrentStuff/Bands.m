@@ -26,7 +26,7 @@ sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
 % Get frequency values and set valid indices for the bands
-fo = HaraldV2Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
+fo = HaraldV3Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
 
 % Create indices for each band
 bandIndices = cell(size(bandNames));
@@ -67,8 +67,8 @@ for stateIdx = 1:length(sleepStates)
     currentStateLabel = sleepStateLabels{stateIdx};
     
     % Calculate power for both animals
-    haraldMeanPowers = calculateMeanPowers(HaraldV2Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
-    canuteMeanPowers = calculateMeanPowers(CanuteV2Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
+    haraldMeanPowers = calculateMeanPowers(HaraldV3Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
+    canuteMeanPowers = calculateMeanPowers(CanuteV3Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
 
     % Plotting
     figure;
@@ -120,7 +120,7 @@ sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
 % Get frequency values and set valid indices for the bands
-fo = HaraldV2Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
+fo = HaraldV3Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
 
 % Create indices for each band
 bandIndices = cell(size(bandNames));
@@ -161,8 +161,8 @@ for stateIdx = 1:length(sleepStates)
     currentStateLabel = sleepStateLabels{stateIdx};
     
     % Calculate power for both animals
-    haraldMeanPowers = calculateMeanPowers2(HaraldV2Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
-    canuteMeanPowers = calculateMeanPowers2(CanuteV2Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
+    haraldMeanPowers = calculateMeanPowers2(HaraldV3Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
+    canuteMeanPowers = calculateMeanPowers2(CanuteV3Combined80, stateIdx, conditions, bandNames, bandIndices, sleepStates);
 
     % Plotting
     figure;
@@ -199,7 +199,7 @@ sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
 % Get frequency values and limit to the range 0-54.99 Hz
-fo = HaraldV2Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
+fo = HaraldV3Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
 validFreqIdx = fo >= 0 & fo <= 54.99;
 restrictedFrequencies = fo(validFreqIdx);
 
@@ -240,10 +240,10 @@ for stateIdx = 1:length(sleepStates)
     currentStateLabel = sleepStateLabels{stateIdx};
     
     % Calculate power for both animals and both periods
-    haraldDayPower = calculateAveragedPowerOverPeriod(HaraldV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
-    haraldNightPower = calculateAveragedPowerOverPeriod(HaraldV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
-    canuteDayPower = calculateAveragedPowerOverPeriod(CanuteV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
-    canuteNightPower = calculateAveragedPowerOverPeriod(CanuteV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
+    haraldDayPower = calculateAveragedPowerOverPeriod(HaraldV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
+    haraldNightPower = calculateAveragedPowerOverPeriod(HaraldV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
+    canuteDayPower = calculateAveragedPowerOverPeriod(CanuteV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
+    canuteNightPower = calculateAveragedPowerOverPeriod(CanuteV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
 
     % Plotting
     figure;
@@ -291,7 +291,7 @@ sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
 % Get frequency values and limit to the range 0-54.99 Hz
-fo = HaraldV2Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
+fo = HaraldV3Combined80.MetaData.fo; % Assuming both animals have identical frequency metadata
 validFreqIdx = fo >= 0 & fo <= 54.99;
 restrictedFrequencies = fo(validFreqIdx);
 
@@ -332,10 +332,10 @@ for stateIdx = 1:length(sleepStates)
     currentStateLabel = sleepStateLabels{stateIdx};
     
     % Calculate power for both animals and both periods
-    haraldDayPower = calculateAveragedPowerOverPeriod2(HaraldV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
-    haraldNightPower = calculateAveragedPowerOverPeriod2(HaraldV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
-    canuteDayPower = calculateAveragedPowerOverPeriod2(CanuteV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
-    canuteNightPower = calculateAveragedPowerOverPeriod2(CanuteV2Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
+    haraldDayPower = calculateAveragedPowerOverPeriod2(HaraldV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
+    haraldNightPower = calculateAveragedPowerOverPeriod2(HaraldV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
+    canuteDayPower = calculateAveragedPowerOverPeriod2(CanuteV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, dayPeriod);
+    canuteNightPower = calculateAveragedPowerOverPeriod2(CanuteV3Combined80, stateIdx, conditions, validFreqIdx, sleepStates, nightPeriod);
 
     % Plotting
     figure;

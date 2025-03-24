@@ -1,25 +1,22 @@
+% Define directory and data structure
 saveDir = '/Users/noahmuscat/Desktop';
-dataStruct = HaraldV2Combined80;
+dataStruct = HaraldV3Combined80;
 
-% Get frequency values from MetaData within the specified range
+% Frequency values
 fo = dataStruct.MetaData.fo;
-%validFreqIdx = (fo >= 0 & fo < 40); 
-validFreqIdx = fo >= 40 & fo < 200 & ...
-              ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
+validFreqIdx = (fo >= 0 & fo < 40); 
+%validFreqIdx = fo >= 40 & fo < 200 & ~(fo >= 55 & fo <= 65) & ~(fo >= 115 & fo <= 125);
 frequencies = fo(validFreqIdx);
 
-% Specify conditions and labels for plotting
+% Conditions and labels
 conditions = {'Cond_300Lux', 'Cond_1000LuxWk1', 'Cond_1000LuxWk4'};
 conditionLabels = {'300 Lux', '1000 Lux Week 1', '1000 Lux Week 4'};
 
-% Define sleep states and their labels
+% Sleep states and labels
 sleepStates = [1, 3, 5];
 sleepStateLabels = {'Wake', 'NREM', 'REM'};
 
-% Define aggregation time interval (5 minutes)
-aggInterval = minutes(5);
-
-% Create spectrograms 
+% Create spectrograms
 for stateIdx = 1:length(sleepStates)
     currentState = sleepStates(stateIdx);
     
@@ -45,14 +42,14 @@ for stateIdx = 1:length(sleepStates)
             powerAccum(n, :) = zPowerState{n}(validFreqIdx)';
         end
 
-        % Sort and accumulate data into the ZT hour structure
-        ztHours = hour(currentTimes) + minute(currentTimes)/60;
-        binEdges = 0:(5/60):24;
+        % Bin data according to the ZT hour structure
+        ztHours = hour(currentTimes);
+        binEdges = 0:24; % Bin edges for ZT hours 0 to 23
         numBins = length(binEdges) - 1;
         binnedPower = zeros(numBins, length(frequencies));
 
         for b = 1:numBins
-            inBin = ztHours >= binEdges(b) & ztHours < binEdges(b+1);
+            inBin = ztHours == (b - 1);
             if any(inBin)
                 binnedPower(b, :) = mean(powerAccum(inBin, :), 1, 'omitnan');
             else
@@ -70,11 +67,11 @@ for stateIdx = 1:length(sleepStates)
         xlabel('ZT Time (hours)');
         ylabel('Z-Scored Frequency (Hz)');
         title(conditionLabels{conditionIdx});
-        xlim([0, 24]); % Restrict x-axis to ZT 0-23
+        xlim([0, 23]); % Restrict x-axis to complete ZT hours
     end
     
     sgtitle(['Z-scored Frequency Power - ', sleepStateLabels{stateIdx}]);
 
     % Save the plot for each sleep state
-    saveas(gcf, fullfile(saveDir, sprintf('HaraldV2Ch80SpectrogramHighFreqs_%s.png', sleepStateLabels{stateIdx})));
+    saveas(gcf, fullfile(saveDir, sprintf('HaraldV3Ch80SpectrogramLowFreqs_%s.png', sleepStateLabels{stateIdx})));
 end

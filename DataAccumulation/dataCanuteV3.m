@@ -2,17 +2,17 @@
 
 % Define the base directories for each condition
 baseDirs = {
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/300Lux', ...
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/1000LuxWk1', ...
-    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Harald/1000LuxWk4'
+    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/300Lux', ...
+    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/1000LuxWk1', ...
+    '/Users/noahmuscat/University of Michigan Dropbox/Noah Muscat/EphysAnalysis/DataFiles/Canute/1000LuxWk4'
 };
 
 % Initialize the main structure
-HaraldV2Combined80 = struct();
-HaraldV2Combined80.MetaData = struct();
-HaraldV2Combined80.MetaData.Ch = 80; % Channel of interest
-HaraldV2Combined80.MetaData.Rat = 'Harald';
-HaraldV2Combined80.MetaData.fo = []; % Initialize MetaData.fo as an empty array
+CanuteV3Combined80 = struct();
+CanuteV3Combined80.MetaData = struct();
+CanuteV3Combined80.MetaData.Ch = 80; % Channel of interest
+CanuteV3Combined80.MetaData.Rat = 'Canute';
+CanuteV3Combined80.MetaData.fo = []; % Initialize MetaData.fo as an empty array
 
 % Define each condition's data structure
 conditions = {'300Lux', '1000LuxWk1', '1000LuxWk4'};
@@ -30,10 +30,10 @@ for i = 1:length(conditions)
     validCondition = validConditions{i};
 
     % Initialize fields for each condition
-    HaraldV2Combined80.(validCondition) = struct();
-    HaraldV2Combined80.(validCondition).ZT_Datetime = [];
-    HaraldV2Combined80.(validCondition).SleepState = [];
-    HaraldV2Combined80.(validCondition).FractionalPower = {}; % Cell array for fractional power spectra
+    CanuteV3Combined80.(validCondition) = struct();
+    CanuteV3Combined80.(validCondition).ZT_Datetime = [];
+    CanuteV3Combined80.(validCondition).SleepState = [];
+    CanuteV3Combined80.(validCondition).FractionalPower = {}; % Cell array for fractional power spectra
 
     % List all subdirectories for each condition
     dayDirs = dir(baseDirs{i});
@@ -61,8 +61,8 @@ for i = 1:length(conditions)
             [~, ZTData] = getDataFromMatFile(sleepFile);
 
             % Append to pooled data
-            HaraldV2Combined80.(validCondition).ZT_Datetime = [HaraldV2Combined80.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
-            HaraldV2Combined80.(validCondition).SleepState = [HaraldV2Combined80.(validCondition).SleepState; ZTData.Sleep_State];
+            CanuteV3Combined80.(validCondition).ZT_Datetime = [CanuteV3Combined80.(validCondition).ZT_Datetime; ZTData.ZT_Datetime];
+            CanuteV3Combined80.(validCondition).SleepState = [CanuteV3Combined80.(validCondition).SleepState; ZTData.Sleep_State];
         else
             warning("SleepState file not found: %s", sleepFile);
         end
@@ -78,8 +78,8 @@ for i = 1:length(conditions)
                 spec = eegData.StateInfo.fspec{1, chIdx}.spec; % TxF
                 fo = eegData.StateInfo.fspec{1, chIdx}.fo; % Fx1
 
-                if isempty(HaraldV2Combined80.MetaData.fo)
-                    HaraldV2Combined80.MetaData.fo = fo; % Save frequencies once
+                if isempty(CanuteV3Combined80.MetaData.fo)
+                    CanuteV3Combined80.MetaData.fo = fo; % Save frequencies once
                 end
 
                 % Identify frequencies to blank based on electrical noise
@@ -106,7 +106,7 @@ for i = 1:length(conditions)
                     end
 
                     % Append to data structure
-                    HaraldV2Combined80.(validCondition).FractionalPower{end+1, 1} = fractionalPower;
+                    CanuteV3Combined80.(validCondition).FractionalPower{end+1, 1} = fractionalPower;
                 end
             else
                 warning("Channel 80 not found in EEG data for folder: %s", folderName);
@@ -117,15 +117,13 @@ for i = 1:length(conditions)
     end
 
     % Ensure consistency across all data fields
-    numEntries = length(HaraldV2Combined80.(validCondition).ZT_Datetime);
-    if length(HaraldV2Combined80.(validCondition).FractionalPower) > numEntries
-        HaraldV2Combined80.(validCondition).FractionalPower = HaraldV2Combined80.(validCondition).FractionalPower(1:numEntries);
+    numEntries = length(CanuteV3Combined80.(validCondition).ZT_Datetime);
+    if length(CanuteV3Combined80.(validCondition).FractionalPower) > numEntries
+        CanuteV3Combined80.(validCondition).FractionalPower = CanuteV3Combined80.(validCondition).FractionalPower(1:numEntries);
     end
 end
 
-%% Step 2: Outlier removal 
-% This part of the code uses the fractional powers and removes outliers
-% based on condition, sleep state, and frequency
+%% Step 2: Outlier removal per condition, sleep state, ZT hour, and frequency
 
 % Define z-score threshold
 zScoreThreshold = 2;
@@ -133,63 +131,78 @@ zScoreThreshold = 2;
 for i = 1:length(conditions)
     validCondition = validConditions{i};
 
+    % Check if ZT_Datetime is a datetime array
+    if isfield(CanuteV3Combined80.(validCondition), 'ZT_Datetime') && ...
+       isa(CanuteV3Combined80.(validCondition).ZT_Datetime, 'datetime') && ...
+       ~isempty(CanuteV3Combined80.(validCondition).ZT_Datetime)
+        
+        % Extract ZT hour integers
+        ZT_Hour = hour(CanuteV3Combined80.(validCondition).ZT_Datetime);
+        
+    else
+        error('ZT_Datetime is either missing, not a datetime array, or empty in %s', validCondition);
+    end
+    
     % Initialize cell array for cleaned data
-    HaraldV2Combined80.(validCondition).CleanedFractionalPower = cell(size(HaraldV2Combined80.(validCondition).FractionalPower));
+    CanuteV3Combined80.(validCondition).CleanedFractionalPower = cell(size(CanuteV3Combined80.(validCondition).FractionalPower));
 
     % Obtain sleep state and fractional powers
-    sleepStates = HaraldV2Combined80.(validCondition).SleepState;
-    allFractionalPowers = cat(2, HaraldV2Combined80.(validCondition).FractionalPower{:}); % FxT
+    sleepStates = CanuteV3Combined80.(validCondition).SleepState;
+    allFractionalPowers = cat(2, CanuteV3Combined80.(validCondition).FractionalPower{:});
 
-    % Unique sleep states for separation
+    % Define unique sleep states and ZT hours
     uniqueStates = unique(sleepStates);
+    uniqueHours = 0:23;
 
+    % Iteration over sleep states and ZT hours
     for s = 1:length(uniqueStates)
         state = uniqueStates(s);
 
-        % Select indices for the current sleep state
-        stateIndices = find(sleepStates == state);
-        if isempty(stateIndices)
-            continue;
-        end
+        for ZT_HourValue = uniqueHours
+            % Find data indices matching current state and hour
+            stateHourIndices = find(sleepStates == state & ZT_Hour == ZT_HourValue);
+            if isempty(stateHourIndices)
+                continue;
+            end
 
-        % Gather power data for only this sleep state
-        stateFractionalPowers = allFractionalPowers(:, stateIndices);
+            % Gather power data for this state and ZT hour
+            stateHourFractionalPowers = allFractionalPowers(:, stateHourIndices);
 
-        % Calculate mean and standard deviation for each frequency in this state
-        meanPower = mean(stateFractionalPowers, 2, 'omitnan');
-        stdPower = std(stateFractionalPowers, 0, 2, 'omitnan');
+            % Calculate mean and standard deviation for each frequency
+            meanPower = mean(stateHourFractionalPowers, 2, 'omitnan');
+            stdPower = std(stateHourFractionalPowers, 0, 2, 'omitnan');
 
-        % Iterate over each time point in this state
-        for idx = stateIndices'
-            currentFractionalPower = HaraldV2Combined80.(validCondition).FractionalPower{idx};
+            for idx = stateHourIndices'
+                currentFractionalPower = CanuteV3Combined80.(validCondition).FractionalPower{idx};
 
-            % Calculate z-score for each frequency
-            zScores = (currentFractionalPower - meanPower) ./ stdPower;
+                % Calculate z-scores for each frequency
+                zScores = (currentFractionalPower - meanPower) ./ stdPower;
 
-            % Identify outliers based on z-score
-            isOutlier = abs(zScores) > zScoreThreshold;
+                % Identify outliers based on z-score
+                isOutlier = abs(zScores) > zScoreThreshold;
 
-            % Exclude outliers by setting to NaN, retaining structure
-            cleanedPower = currentFractionalPower;
-            cleanedPower(isOutlier) = NaN;
+                % Exclude outliers by setting to NaN
+                cleanedPower = currentFractionalPower;
+                cleanedPower(isOutlier) = NaN;
 
-            % Store cleaned fractional power back in the original index
-            HaraldV2Combined80.(validCondition).CleanedFractionalPower{idx} = cleanedPower;
+                % Store cleaned fractional power
+                CanuteV3Combined80.(validCondition).CleanedFractionalPower{idx} = cleanedPower;
+            end
         end
     end
 end
 
-%% Step 3: Normalize to 300Lux Baseline
+%% Step 3: Normalize to 300Lux Baseline per sleep state, ZT hour, and frequency
 
 % Define sleep states
 sleepStates = [1, 3, 5]; % 1 = WAKE, 3 = NREM, 5 = REM
 
 % Use the last 4 days of data from the 300Lux condition as the normalization baseline
 luxField = 'Cond_300Lux';
-data300Lux = HaraldV2Combined80.(luxField);
+data300Lux = CanuteV3Combined80.(luxField);
 
 % Calculate the timeframe for the last 4 days
-datetime_list = data300Lux.ZT_Datetime; % Using ZT_Datetime, assuming you have updated it
+datetime_list = data300Lux.ZT_Datetime;
 endTime = datetime_list(end);
 startTime = endTime - days(4);
 
@@ -199,60 +212,77 @@ last4DaysMask = (datetime_list >= startTime) & (datetime_list <= endTime);
 % Extract last 4 days' data
 last4DaysSleepState = data300Lux.SleepState(last4DaysMask);
 last4DaysFractionalPower = data300Lux.CleanedFractionalPower(last4DaysMask);
+last4DaysZT_Hour = hour(datetime_list(last4DaysMask));
 
-% Initialize holders for mean and std for each frequency and sleep state
-numFrequencies = length(HaraldV2Combined80.MetaData.fo);
-mean_sleepState = zeros(numFrequencies, length(sleepStates));
-std_sleepState = zeros(numFrequencies, length(sleepStates));
+% Initialize holders for mean and std for each frequency, sleep state, and hour
+numFrequencies = length(CanuteV3Combined80.MetaData.fo);
+mean_baseline = NaN(numFrequencies, length(sleepStates), 24);
+std_baseline = NaN(numFrequencies, length(sleepStates), 24);
 
-% Calculate baseline mean and std for each sleep state
+% Calculate baseline mean and std
 for s = 1:length(sleepStates)
     state = sleepStates(s);
-    
-    % Select data specific to the sleep state
-    stateMask = (last4DaysSleepState == state);
-    stateFractionalPower = cat(2, last4DaysFractionalPower{stateMask});
-    
-    % Calculate mean and std, omitting NaNs
-    mean_sleepState(:, s) = mean(stateFractionalPower, 2, 'omitnan');
-    std_sleepState(:, s) = std(stateFractionalPower, 0, 2, 'omitnan');
+
+    for hr = uniqueHours
+        % Find corresponding indices
+        stateHourIndices = find(last4DaysSleepState == state & last4DaysZT_Hour == hr);
+        if isempty(stateHourIndices)
+            continue;
+        end
+
+        % Gather power data for this sleep state and hour
+        stateHourFractionalPowers = cat(2, last4DaysFractionalPower{stateHourIndices});
+
+        % Calculate mean and std
+        mean_baseline(:, s, hr + 1) = mean(stateHourFractionalPowers, 2, 'omitnan');
+        std_baseline(:, s, hr + 1) = std(stateHourFractionalPowers, 0, 2, 'omitnan');
+    end
 end
 
-% Calculate z-scores across all conditions based on baseline statistics
+% Normalize each condition's data
 for i = 1:length(conditions)
     validCondition = validConditions{i};
-    conditionData = HaraldV2Combined80.(validCondition);
+    conditionData = CanuteV3Combined80.(validCondition);
 
     % Initialize z-score storage
     conditionData.ZScoreFractionalPower = cell(size(conditionData.CleanedFractionalPower));
 
-    % Iterate over each sleep state
+    % Extract ZT hour for each data point
+    ZT_Hour = hour(conditionData.ZT_Datetime);
+
+    % Iterate over each sleep state and ZT hour
     for s = 1:length(sleepStates)
         state = sleepStates(s);
-        stateIndices = (conditionData.SleepState == state);
 
-        % Retrieve baseline mean and std
-        baselineMean = mean_sleepState(:, s);
-        baselineStd = std_sleepState(:, s);
+        for hrs = uniqueHours
+            stateHourIndices = find(conditionData.SleepState == state & ZT_Hour == hrs);
+            if isempty(stateHourIndices)
+                continue;
+            end
 
-        % Iterate over each time point index for the current sleep state
-        for idx = find(stateIndices)'
-            currentFractionalPower = conditionData.CleanedFractionalPower{idx};
+            % Retrieve baseline mean and std for the specific state and hour
+            baselineMean = mean_baseline(:, s, hrs + 1);
+            baselineStd = std_baseline(:, s, hrs + 1);
 
-            % Calculate z-scores for current time point
-            zScores = (currentFractionalPower - baselineMean) ./ baselineStd;
+            % Iterate over each index
+            for idx = stateHourIndices'
+                currentFractionalPower = conditionData.CleanedFractionalPower{idx};
 
-            % Store z-scores
-            conditionData.ZScoreFractionalPower{idx} = zScores;
+                % Calculate z-scores
+                zScores = (currentFractionalPower - baselineMean) ./ baselineStd;
+
+                % Store z-scores
+                conditionData.ZScoreFractionalPower{idx} = zScores;
+            end
         end
     end
-    
+
     % Update the main structure with the z-score data
-    HaraldV2Combined80.(validCondition).ZScoreFractionalPower = conditionData.ZScoreFractionalPower;
+    CanuteV3Combined80.(validCondition).ZScoreFractionalPower = conditionData.ZScoreFractionalPower;
 end
 
 %% Save processed data
-save('HaraldV2Ch80.mat', 'HaraldV2Combined80', '-v7.3');
+save('CanuteV3Ch80.mat', 'CanuteV3Combined80', '-v7.3');
 
 %% functions
 function isDst = isDST(timestamp)
